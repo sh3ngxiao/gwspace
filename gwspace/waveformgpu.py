@@ -12,6 +12,34 @@ import numpy as np
 from numpy import sin, cos, sqrt
 from scipy.interpolate import InterpolatedUnivariateSpline as Spline
 
+try:
+    import cupy as cp
+    _has_cupy = True
+except Exception:
+    cp = None
+    _has_cupy = False
+
+
+def _get_xp(arr=None):
+    if _has_cupy:
+        return cp
+    return np
+
+
+def _to_xp(arr, xp):
+    if xp is np:
+        if _has_cupy and isinstance(arr, cp.ndarray):
+            return arr.get()
+        return np.asarray(arr)
+    return cp.asarray(arr)
+
+
+def _to_cpu(arr):
+    if _has_cupy and isinstance(arr, cp.ndarray):
+        return arr.get()
+    return np.asarray(arr)
+
+
 from gwspace.Orbit import detectors
 from gwspace.utils import sYlm
 from gwspace.constants import MSUN_SI, MTSUN_SI, MPC_SI, YRSID_SI, PI, PI_2, C_SI
@@ -161,9 +189,10 @@ class BurstWaveform(object):
         self.tc = tc
 
     def get_hphc(self, tf):
-        t = tf-self.tc
+        xp = _get_xp(tf)
+        t = _to_xp(tf, xp) - self.tc
         h = (2/PI)**0.25 * self.tau**(-0.5) * self.amp
-        h *= np.exp(- (t/self.tau)**2)*np.exp(2j*PI*self.fc*t)
+        h = h * xp.exp(- (t/self.tau)**2) * xp.exp(2j*PI*self.fc*t)
         return h.real, h.imag
 
 
@@ -449,12 +478,14 @@ class GCBWaveform(BasicWaveform):
         return 2*(self.Mc*MTSUN_SI)**(5/3) * C_SI/(self.DL*MPC_SI) * (PI*self.f0)**(2/3)
 
     def get_hphc(self, t):
+        xp = _get_xp(t)
+        t = _to_xp(t, xp)
         # FIXME: use self.T_obs
         phase = 2*PI*(self.f0 + 0.5*self.fdot*t + 1/6*self.fddot*t*t)*t + self.phi0
-        csi = cos(self.iota)
+        csi = xp.cos(self.iota)
 
-        hp = self.amplitude*cos(phase)*(1+csi*csi)
-        hc = self.amplitude*sin(phase)*2*csi
+        hp = self.amplitude * xp.cos(phase) * (1 + csi*csi)
+        hc = self.amplitude * xp.sin(phase) * 2 * csi
         return hp, hc
 
     def _buffer_size(self, det, oversample=1):
@@ -761,25 +792,28 @@ class EMRIWaveform(BasicWaveform):
         return h.real, h.imag
 
     def get_hphc(self, tf, eps=1e-5, modes=None):
-        Tobs = tf[-1]/YRSID_SI
-        dt = tf[1]-tf[0]
+        xp = _get_xp(tf)
+        tf_cpu = _to_cpu(tf)
+        Tobs = tf_cpu[-1]/YRSID_SI
+        dt = tf_cpu[1]-tf_cpu[0]
         # T = Tobs - int(Tobs * YRSID_SI/dt - tf.shape[0]) * dt/YRSID_SI
         # print("the total observ time is ", Tobs)
         hpS, hcS = self.get_hphc_source(Tobs, dt, eps, modes)
 
-        tf_size = tf.shape[0]
+        tf_size = tf_cpu.shape[0]
         h_size = hpS.shape[0]
+        tf_xp = _to_xp(tf, xp)
         if tf_size > h_size:
-            hp = np.zeros_like(tf)
-            hc = np.zeros_like(tf)
-            hp[:h_size] = hpS
-            hc[:h_size] = hcS
+            hp = xp.zeros_like(tf_xp)
+            hc = xp.zeros_like(tf_xp)
+            hp[:h_size] = _to_xp(hpS, xp)
+            hc[:h_size] = _to_xp(hcS, xp)
         elif tf_size < h_size:
-            hp = hpS[-tf_size:]
-            hc = hcS[-tf_size:]
+            hp = _to_xp(hpS[-tf_size:], xp)
+            hc = _to_xp(hcS[-tf_size:], xp)
         else:
-            hp = hpS
-            hc = hcS
+            hp = _to_xp(hpS, xp)
+            hc = _to_xp(hcS, xp)
         return hp, hc
 
 
@@ -825,9 +859,11 @@ class RingdownWaveform(BasicWaveform):
         return 5**(3/8)/(8*PI) * (MTSUN_SI*self.Mc)**(-5/8) * self.T_obs**(-3/8)
 
     def get_hphc(self, times):
-        hp = self.hp_func(times)
-        hc = self.hc_func(times)
-        return hp, hc
+        xp = _get_xp(times)
+        times_cpu = _to_cpu(times)
+        hp = self.hp_func(times_cpu)
+        hc = self.hc_func(times_cpu)
+        return _to_xp(hp, xp), _to_xp(hc, xp)
 
     def _generate_waveform(self):
         import lalsimulation as lalsim

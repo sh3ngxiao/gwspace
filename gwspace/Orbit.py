@@ -15,10 +15,13 @@ import numpy as np
 from gwspace.constants import (C_SI, PI, PI_2, PI_3, G_SI, AU_T, J0806_phi, J0806_theta,
                                EarthOrbitFreq_SI, EarthEcc, Perihelion_Ang, EarthMass)
 
-if __package__ or "." in __name__:
-    from gwspace import libFastGB
-else:
-    import libFastGB
+try:
+    if __package__ or "." in __name__:
+        from gwspace import libFastGB  # type: ignore
+    else:
+        import libFastGB  # type: ignore
+except Exception:
+    libFastGB = None  # optional; only needed when calling get_pos
 
 
 class Orbit(object):
@@ -202,6 +205,8 @@ def get_pos(tf, detector="TianQin", toT=True):
     z = np.zeros(3*N, 'd')
     L = np.zeros(1,  'd')
 
+    if libFastGB is None:
+        raise ImportError("libFastGB extension is required for orbit sampling but is not available")
     libFastGB.Orbits(detector, N, tf, x, y, z, L)
 
     x, y, z, L = x.copy(), y.copy(), z.copy(), L.copy()

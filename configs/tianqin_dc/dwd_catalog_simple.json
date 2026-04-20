@@ -1,0 +1,24 @@
+{
+  "dataset": {
+    "name": "tianqin_dc_dwd_catalog_simple",
+    "description": "Simple DWD-only TianQin XYZ dataset generated from the 8-column LISA source table."
+  },
+  "seed": 20260415,
+  "catalog": {
+    "path": "tianqin_dc/sim_lisa_part01.txt",
+    "row_numbers": [1]
+  },
+  "observation": {
+    "duration_s": 32768.0,
+    "sample_rate_hz": 0.25,
+    "detector": "TQ",
+    "tdi_generation": 1,
+    "use_gpu": false
+  },
+  "output": {
+    "path": "outputs/tianqin_dc_dwd_catalog_simple.h5",
+    "overwrite": true,
+    "compression": "gzip",
+    "compression_level": 4
+  }
+}

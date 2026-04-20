@@ -1,0 +1,68 @@
+{
+  "dataset": {
+    "name": "tianqin_dc_dwd_sbbh",
+    "description": "DWD + SBBH mixed TianQin prototype dataset."
+  },
+  "seed": 20260422,
+  "observation": {
+    "duration_s": 4096.0,
+    "sample_rate_hz": 0.25,
+    "detector": "TQ",
+    "tdi_generation": 1,
+    "channels": ["A", "E", "T"],
+    "use_gpu": false
+  },
+  "noise": {
+    "enabled": true,
+    "model": "TQ",
+    "unit": "relative_frequency",
+    "include_confusion": false
+  },
+  "output": {
+    "path": "outputs/tianqin_dc_dwd_sbbh.h5",
+    "overwrite": true,
+    "compression": "gzip",
+    "compression_level": 4,
+    "save_signal": true,
+    "save_noise": true,
+    "save_per_source": true
+  },
+  "sources": [
+    {
+      "kind": "dwd",
+      "name": "dwd_population",
+      "role": "target",
+      "count": 2,
+      "sampler": {
+        "mass1": { "distribution": "uniform", "low": 0.35, "high": 0.85 },
+        "mass2": { "distribution": "uniform", "low": 0.25, "high": 0.75 },
+        "DL": { "distribution": "loguniform", "low": 0.002, "high": 0.03 },
+        "phi0": { "distribution": "uniform", "low": 0.0, "high": 6.283185307179586 },
+        "f0": { "distribution": "uniform", "low": 0.001, "high": 0.004 },
+        "psi": { "distribution": "uniform", "low": 0.0, "high": 3.141592653589793 },
+        "iota": { "distribution": "uniform", "low": 0.0, "high": 3.141592653589793 },
+        "Lambda": { "distribution": "uniform", "low": 0.0, "high": 6.283185307179586 },
+        "Beta": { "distribution": "uniform", "low": -1.2, "high": 1.2 }
+      }
+    },
+    {
+      "kind": "sbbh",
+      "name": "sbbh_population",
+      "role": "target",
+      "count": 1,
+      "fixed": {
+        "engine": "auto"
+      },
+      "sampler": {
+        "mass1": { "distribution": "uniform", "low": 20.0, "high": 80.0 },
+        "mass2": { "distribution": "uniform", "low": 10.0, "high": 60.0 },
+        "DL": { "distribution": "loguniform", "low": 100.0, "high": 2000.0 },
+        "Lambda": { "distribution": "uniform", "low": 0.0, "high": 6.283185307179586 },
+        "Beta": { "distribution": "uniform", "low": -1.0, "high": 1.0 },
+        "iota": { "distribution": "uniform", "low": 0.0, "high": 3.141592653589793 },
+        "psi": { "distribution": "uniform", "low": 0.0, "high": 3.141592653589793 },
+        "eccentricity": { "distribution": "uniform", "low": 0.0, "high": 0.1 }
+      }
+    }
+  ]
+}

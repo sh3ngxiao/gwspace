@@ -1,0 +1,28 @@
+Start time: Mon Apr 13 17:30:58 CST 2026
+[WARN] module command is unavailable, skipping module load.
+REPO_DIR=/home/sh3ng/projects/GWSpace
+WORK_DIR=/home/sh3ng/projects/GWSpace
+CONFIG_ABS=/home/sh3ng/projects/GWSpace/configs/tianqin_dc/emri_catalog_simple.json
+OUTPUT_ABS=from-config
+PYTHON_BIN=python
+CONDA_ENV_NAME=
+CACHE_ROOT=/home/sh3ng/projects/GWSpace/.cache
+MPLCONFIGDIR=/home/sh3ng/projects/GWSpace/.cache/matplotlib
+SLURM_JOB_ID=N/A
+SLURM_CPUS_PER_TASK=N/A
+CPU_LIMIT=1
+MEM_GB_LIMIT=16
+STRICT_MEM_LIMIT=0
+TIMEOUT_SECONDS=none
+DRY_RUN=1
+Config summary:
+  duration_s = 63072000.0
+  sample_rate_hz = 0.2
+  sample_spacing_s = 5.0
+  num_samples = 12614400
+  selected_sources_hint = 1
+  single_float64_array_gib = 0.094
+  rough_single_source_peak_memory_gib = 7.05  # heuristic only
+  WARNING: sample count is very large; TD XYZ generation may require several GiB even for one source.
+Command: python -m tianqin_dc.emri_cli --config /home/sh3ng/projects/GWSpace/configs/tianqin_dc/emri_catalog_simple.json
+DRY_RUN=1, command not executed.

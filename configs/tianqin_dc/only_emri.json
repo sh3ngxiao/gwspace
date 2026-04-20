@@ -1,0 +1,57 @@
+{
+  "dataset": {
+    "name": "tianqin_dc_only_emri",
+    "description": "EMRI-only TianQin prototype dataset."
+  },
+  "seed": 20260412,
+  "observation": {
+    "duration_s": 4096.0,
+    "sample_rate_hz": 0.25,
+    "detector": "TQ",
+    "tdi_generation": 1,
+    "channels": ["A", "E", "T"],
+    "use_gpu": false
+  },
+  "noise": {
+    "enabled": true,
+    "model": "TQ",
+    "unit": "relative_frequency",
+    "include_confusion": false
+  },
+  "output": {
+    "path": "outputs/tianqin_dc_only_emri.h5",
+    "overwrite": true,
+    "compression": "gzip",
+    "compression_level": 4,
+    "save_signal": true,
+    "save_noise": true,
+    "save_per_source": true
+  },
+  "sources": [
+    {
+      "kind": "emri",
+      "name": "emri_population",
+      "role": "target",
+      "count": 1,
+      "fixed": {
+        "M": 100000.0,
+        "mu": 10.0,
+        "a": 0.1,
+        "p0": 12.0,
+        "e0": 0.1,
+        "x0": 1.0,
+        "dist": 0.1,
+        "backend": "cpu"
+      },
+      "sampler": {
+        "qS": { "distribution": "uniform", "low": 0.4, "high": 2.6 },
+        "phiS": { "distribution": "uniform", "low": 0.0, "high": 6.283185307179586 },
+        "qK": { "distribution": "uniform", "low": 0.2, "high": 1.2 },
+        "phiK": { "distribution": "uniform", "low": 0.0, "high": 6.283185307179586 },
+        "Phi_phi0": { "distribution": "uniform", "low": 0.0, "high": 6.283185307179586 },
+        "Phi_theta0": { "distribution": "uniform", "low": 0.0, "high": 6.283185307179586 },
+        "Phi_r0": { "distribution": "uniform", "low": 0.0, "high": 6.283185307179586 }
+      }
+    }
+  ]
+}

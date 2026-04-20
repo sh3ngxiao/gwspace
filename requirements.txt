@@ -1,6 +1,7 @@
 numpy
 Cython
 setuptools
+h5py
 matplotlib
 numba
 scipy

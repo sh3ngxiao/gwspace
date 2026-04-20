@@ -1,0 +1,67 @@
+Start time: Mon Apr 13 17:24:37 CST 2026
+[WARN] module command is unavailable, skipping module load.
+REPO_DIR=/home/sh3ng/projects/GWSpace
+WORK_DIR=/home/sh3ng/projects/GWSpace
+SCRIPT_PATH=/home/sh3ng/projects/GWSpace/examples/frequency.py
+PYTHON_BIN=python
+CONDA_ENV_NAME=gwspace312
+SLURM_JOB_ID=N/A
+SLURM_CPUS_PER_TASK=N/A
+CPU_LIMIT=4
+MEM_GB_LIMIT=4
+STRICT_MEM_LIMIT=0
+TIMEOUT_SECONDS=120
+MPLBACKEND=Agg
+OMP_NUM_THREADS=4
+/home/sh3ng/.config/matplotlib is not a writable directory
+Matplotlib created a temporary cache directory at /tmp/matplotlib-jjimfflh because there was an issue with the default path (/home/sh3ng/.config/matplotlib); it is highly recommended to set the MPLCONFIGDIR environment variable to a writable directory, in particular to speed up the import of Matplotlib and to better support multiprocessing.
+=== Sgr A* EMRI ===
+Input p0 = 9.000
+Input a = 0.100
+Input dist = 8.000e-06 Gpc
+f_src = 5.566e-04 Hz
+h0 source = EMRIWaveform envelope estimate
+h0 = 6.128e-17
+fdot source = FEW trajectory estimate
+fdot = 1.142e-12 Hz/s
+FEW initial p = 9.000000, final p = 6.116017
+FEW initial f = 5.566e-04 Hz, final f = 9.936e-04 Hz
+FEW frequency model uses effective a = 0.000
+h0 estimated from first 3.643e-03 yr waveform segment (5749 samples)
+Chirp timescale f/fdot = 4.873e+08 s (1.544e+01 yr)
+h_c = sqrt(2 f^2 / fdot) * h0 = 4.513e-14
+Gain factor sqrt(2 f^2 / fdot) = 736.52x
+--- Approx SNR from h_c ratio ---
+LGWA: SNR=1.323e+03
+LISA: SNR=4.127e+06
+Taiji (4yr full): SNR=2.782e+06
+TianQin: SNR=7.226e+05
+Saved figure: /home/sh3ng/projects/GWSpace/examples/frequency_publication_style.png
+Saved figure: /home/sh3ng/projects/GWSpace/examples/frequency_publication_style.pdf
+/home/sh3ng/projects/GWSpace/examples/frequency.py:495: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
+  plt.show()
+	Command being timed: "python /home/sh3ng/projects/GWSpace/examples/frequency.py"
+	User time (seconds): 18.34
+	System time (seconds): 1.54
+	Percent of CPU this job got: 86%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:22.96
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 572528
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 2518
+	Minor (reclaiming a frame) page faults: 375877
+	Voluntary context switches: 5284
+	Involuntary context switches: 34
+	Swaps: 0
+	File system inputs: 577240
+	File system outputs: 1336
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+End time: Mon Apr 13 17:25:02 CST 2026
+Run log: /home/sh3ng/projects/GWSpace/logs/python_job_local_20260413_172437.log

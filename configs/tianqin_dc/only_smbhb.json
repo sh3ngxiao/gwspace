@@ -1,0 +1,51 @@
+{
+  "dataset": {
+    "name": "tianqin_dc_only_smbhb",
+    "description": "SMBHB-only TianQin prototype dataset."
+  },
+  "seed": 20260411,
+  "observation": {
+    "duration_s": 4096.0,
+    "sample_rate_hz": 0.25,
+    "detector": "TQ",
+    "tdi_generation": 1,
+    "channels": ["A", "E", "T"],
+    "use_gpu": false
+  },
+  "noise": {
+    "enabled": true,
+    "model": "TQ",
+    "unit": "relative_frequency",
+    "include_confusion": false
+  },
+  "output": {
+    "path": "outputs/tianqin_dc_only_smbhb.h5",
+    "overwrite": true,
+    "compression": "gzip",
+    "compression_level": 4,
+    "save_signal": true,
+    "save_noise": true,
+    "save_per_source": true
+  },
+  "sources": [
+    {
+      "kind": "smbhb",
+      "name": "smbhb_population",
+      "role": "target",
+      "count": 1,
+      "fixed": {
+        "engine": "auto"
+      },
+      "sampler": {
+        "mass1": { "distribution": "loguniform", "low": 100000.0, "high": 3000000.0 },
+        "mass2": { "distribution": "loguniform", "low": 50000.0, "high": 1000000.0 },
+        "DL": { "distribution": "loguniform", "low": 500.0, "high": 5000.0 },
+        "Lambda": { "distribution": "uniform", "low": 0.0, "high": 6.283185307179586 },
+        "Beta": { "distribution": "uniform", "low": -1.0, "high": 1.0 },
+        "iota": { "distribution": "uniform", "low": 0.0, "high": 3.141592653589793 },
+        "psi": { "distribution": "uniform", "low": 0.0, "high": 3.141592653589793 },
+        "eccentricity": { "distribution": "uniform", "low": 0.0, "high": 0.1 }
+      }
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import sys
 from pathlib import Path
@@ -44,6 +45,7 @@ TAIJI_CONFUSION_COEFFS = {
     '4yr': (-85.5448, -3.23671, -1.64187, -1.14711, 0.0325887, 0.187854),
 }
 TAIJI_DEFAULT_OBSERVATION = '4yr'
+DEFAULT_EMRI_MODEL = 'FastSchwarzschildEccentricFlux'
 
 def get_lgwa_hc(freq):
     # 【已严格校准】LGWA (基于上传论文 arXiv:2010.13726v1, Harms et al. 2020) 
@@ -132,29 +134,62 @@ def get_source_hc_from_fdot(h0, freq, fdot):
     safe_fdot = np.maximum(np.abs(fdot), 1e-30)
     return h0 * np.sqrt(2.0 * np.square(freq) / safe_fdot)
 
-def get_emri_dominant_gw_frequency_hz(mass1, mass2, a, p, e, x):
+def get_selected_emri_model_info():
+    model_name = os.getenv('GWSPACE_EMRI_MODEL', DEFAULT_EMRI_MODEL).strip()
+    if not model_name:
+        model_name = DEFAULT_EMRI_MODEL
+
+    if 'Kerr' in model_name:
+        return {
+            'waveform_model': model_name,
+            'background': 'Kerr',
+            'inspiral_func': 'KerrEccEqFlux',
+        }
+    if 'Schwarzschild' in model_name:
+        return {
+            'waveform_model': model_name,
+            'background': 'Schwarzschild',
+            'inspiral_func': 'SchwarzEccFlux',
+        }
+    raise ValueError(
+        f'Unsupported GWSPACE_EMRI_MODEL={model_name!r} for frequency.py. '
+        'Expected a Schwarzschild or Kerr FEW stock model.'
+    )
+
+
+def get_emri_dominant_gw_frequency_hz(mass1, mass2, a, p, e, x, background='Schwarzschild'):
     """对当前 quasi-circular、equatorial EMRI，取主导 m=2 谐波: f_gw ~= 2 * Omega_phi."""
     if not HAS_FEW:
         raise ImportError('FEW is not available.')
-    # 当前仓库里的 EMRI 路径使用 Schwarzschild 轨道频率，因此这里显式按 a=0 取频率。
-    a_eff = 0.0
+
+    if background == 'Schwarzschild':
+        a_eff = 0.0
+    elif background == 'Kerr':
+        a_eff = float(a)
+    else:
+        raise ValueError(f'Unsupported EMRI background: {background}')
+
     omega_phi, _, _ = get_0PA_frequencies(mass1, mass2, a_eff, p, e, x)
     return 2.0 * np.asarray(omega_phi), a_eff
 
-def estimate_emri_frequency_and_fdot_from_few(emri_pars, dt_sec=86400.0):
-    """用 FEW 轨道在 EMRI 初始参数点估计主导 GW 频率与 fdot."""
+def estimate_emri_frequency_and_fdot_from_few(emri_pars, dt_sec=86400.0, model_info=None):
+    """用与波形背景一致的 FEW 轨道在 EMRI 初始参数点估计主导 GW 频率与 fdot."""
     if not HAS_FEW:
         raise ImportError('FEW is not available.')
+    if model_info is None:
+        model_info = get_selected_emri_model_info()
 
-    a_eff = 0.0
-    traj = EMRIInspiral(func='SchwarzEccFlux', force_backend='cpu')
+    background = model_info['background']
+    inspiral_func = model_info['inspiral_func']
+    a_eff = 0.0 if background == 'Schwarzschild' else float(emri_pars['a'])
+    traj = EMRIInspiral(func=inspiral_func, force_backend='cpu')
     t_obs_yr = float(emri_pars['T_obs']) / YRSID_SI
     t, p, e, x, Phi_phi, Phi_theta, Phi_r = traj(
         emri_pars['M'], emri_pars['mu'], a_eff, emri_pars['p0'], emri_pars['e0'], emri_pars['x0'],
         T=t_obs_yr, dt=dt_sec, DENSE_STEPPING=1,
     )
     f_gw, _ = get_emri_dominant_gw_frequency_hz(
-        emri_pars['M'], emri_pars['mu'], emri_pars['a'], p, e, x,
+        emri_pars['M'], emri_pars['mu'], emri_pars['a'], p, e, x, background=background,
     )
     f_gw = np.asarray(f_gw, dtype=float)
     t = np.asarray(t, dtype=float)
@@ -167,6 +202,9 @@ def estimate_emri_frequency_and_fdot_from_few(emri_pars, dt_sec=86400.0):
         'p_end': float(p[-1]),
         't_span_sec': float(t[-1] - t[0]),
         'a_eff': float(a_eff),
+        'waveform_model': model_info['waveform_model'],
+        'background': background,
+        'inspiral_func': inspiral_func,
     }
 
 def estimate_emri_h0_from_waveform(emri_pars, f_ref, dt_sec=20.0, cycles=64, eps=1e-5):
@@ -183,6 +221,8 @@ def estimate_emri_h0_from_waveform(emri_pars, f_ref, dt_sec=20.0, cycles=64, eps
         'h0': float(np.max(h_env)),
         'duration_yr': float(duration_yr),
         'samples': int(h_env.size),
+        'waveform_model': getattr(wf, '_few_model_name', 'unknown'),
+        'background': getattr(wf, '_few_background', 'unknown'),
     }
 
 # ================= 2. 频率网格分配与实测数据读取 =================
@@ -226,7 +266,20 @@ EMRIpars = {
 }
 
 try:
-    emri_fdot_info = estimate_emri_frequency_and_fdot_from_few(EMRIpars, dt_sec=86400.0)
+    emri_model_info = get_selected_emri_model_info()
+except Exception as exc:
+    emri_model_info = {
+        'waveform_model': os.getenv('GWSPACE_EMRI_MODEL', DEFAULT_EMRI_MODEL),
+        'background': 'unknown',
+        'inspiral_func': f'unknown ({exc})',
+    }
+
+try:
+    emri_fdot_info = estimate_emri_frequency_and_fdot_from_few(
+        EMRIpars,
+        dt_sec=86400.0,
+        model_info=emri_model_info,
+    )
     f_src = emri_fdot_info['f_src']
     fdot_src = emri_fdot_info['fdot']
     f_end_src = emri_fdot_info['f_end']
@@ -278,6 +331,8 @@ print('=== Sgr A* EMRI ===')
 print(f'Input p0 = {EMRIpars["p0"]:.3f}')
 print(f'Input a = {EMRIpars["a"]:.3f}')
 print(f'Input dist = {EMRIpars["dist"]:.3e} Gpc')
+print(f'Configured waveform model = {emri_model_info["waveform_model"]}')
+print(f'Configured EMRI background = {emri_model_info["background"]}')
 print(f'f_src = {f_src:.3e} Hz')
 print(f'h0 source = {h0_src_label}')
 print(f'h0 = {h0_src:.3e}')
@@ -289,8 +344,21 @@ if np.isfinite(f_end_src):
     print(f'FEW initial f = {f_src:.3e} Hz, final f = {f_end_src:.3e} Hz')
 if np.isfinite(a_eff_src):
     print(f'FEW frequency model uses effective a = {a_eff_src:.3f}')
+if emri_fdot_info is not None:
+    print(
+        'FEW trajectory path: '
+        f'background={emri_fdot_info["background"]}, '
+        f'inspiral_func={emri_fdot_info["inspiral_func"]}'
+    )
 if emri_h0_info is not None:
-    print(f'h0 estimated from first {emri_h0_info["duration_yr"]:.3e} yr waveform segment ({emri_h0_info["samples"]} samples)')
+    print(
+        f'h0 estimated from first {emri_h0_info["duration_yr"]:.3e} yr waveform segment '
+        f'({emri_h0_info["samples"]} samples)'
+    )
+    print(
+        'Waveform amplitude path: '
+        f'model={emri_h0_info["waveform_model"]}, background={emri_h0_info["background"]}'
+    )
 print(f'Chirp timescale f/fdot = {t_chirp_src:.3e} s ({t_chirp_src / SEC_PER_YEAR:.3e} yr)')
 print(f'h_c = sqrt(2 f^2 / fdot) * h0 = {hc_src:.3e}')
 print(f'Gain factor sqrt(2 f^2 / fdot) = {hc_gain:.2f}x')

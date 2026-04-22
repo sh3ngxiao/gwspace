@@ -13,8 +13,17 @@ import fisher as base
 
 from gwspace.Noise import TianQinNoise
 from gwspace.Waveform import EMRIWaveform
+from gwspace.constants import MTSUN_SI
 from gwspace.fishertool import fisher_matrix
 
+try:
+    from few.utils.geodesic import get_fundamental_frequencies, get_separatrix
+
+    HAS_FEW_GEODESIC = True
+except Exception:
+    get_fundamental_frequencies = None
+    get_separatrix = None
+    HAS_FEW_GEODESIC = False
 
 RAW_PARAMS = base._parse_csv_strings(os.getenv("FISHER_EXP_RAW_PARAMS", "M,mu,p0"))
 BASIS_MODE = os.getenv("FISHER_EXP_BASIS", "log_selected").strip().lower()
@@ -33,6 +42,10 @@ AXIS_ALIASES = base._parse_csv_strings(_AXIS_ALIASES_RAW) if _AXIS_ALIASES_RAW e
 EIGEN_SOURCE_MODE = os.getenv("FISHER_EXP_EIGEN_SOURCE", "emri_freq_chirp").strip().lower()
 _EIGEN_REF_STEP_RAW = os.getenv("FISHER_EXP_EIGEN_REF_STEP", "").strip()
 EIGEN_REF_STEP = float(_EIGEN_REF_STEP_RAW) if _EIGEN_REF_STEP_RAW else None
+BASIS_REL_STEP = float(os.getenv("FISHER_EXP_BASIS_REL_STEP", "1e-6"))
+BASIS_ABS_STEP = float(os.getenv("FISHER_EXP_BASIS_ABS_STEP", "1e-10"))
+FDOT_DT_SEC = float(os.getenv("FISHER_EXP_FDOT_DT_SEC", "86400.0"))
+FDOT_STEPS = int(os.getenv("FISHER_EXP_FDOT_STEPS", "16"))
 
 
 @dataclass
@@ -268,7 +281,227 @@ def build_emri_freq_chirp_transform(raw_params, raw_values, freq_alpha, chirp_m_
     )
 
 
-def build_transform_from_mode(mode, raw_params, raw_values):
+def _as_scalar(value):
+    arr = np.asarray(value, dtype=float)
+    if arr.shape == ():
+        return float(arr)
+    return float(arr.reshape(-1)[0])
+
+
+def _get_inspiral_generator(wf):
+    wave_gen = getattr(getattr(wf, "wave_func", None), "waveform_generator", None)
+    inspiral = getattr(wave_gen, "inspiral_generator", None)
+    if inspiral is None:
+        raise ValueError("The current EMRI waveform object does not expose a FEW inspiral generator.")
+    return inspiral
+
+
+def _estimate_omega_phi_dot_si(inspiral, pars):
+    if FDOT_DT_SEC <= 0:
+        raise ValueError(f"FISHER_EXP_FDOT_DT_SEC must be positive, got {FDOT_DT_SEC}.")
+    if FDOT_STEPS < 3:
+        raise ValueError(f"FISHER_EXP_FDOT_STEPS must be at least 3, got {FDOT_STEPS}.")
+
+    t_obs_yr = float(pars["T_obs"]) / base.YRSID_SI
+    span_steps = max(FDOT_STEPS, 3)
+
+    last_reason = "trajectory did not yield enough samples"
+    for _ in range(6):
+        span_yr = min(t_obs_yr, span_steps * FDOT_DT_SEC / base.YRSID_SI)
+        traj = inspiral(
+            pars["M"],
+            pars["mu"],
+            pars["a"],
+            pars["p0"],
+            pars["e0"],
+            pars["x0"],
+            T=span_yr,
+            dt=FDOT_DT_SEC,
+            DENSE_STEPPING=1,
+        )
+        t, p, e, x = (np.asarray(item, dtype=float) for item in traj[:4])
+        if t.size >= 3:
+            omega_phi = np.asarray(
+                get_fundamental_frequencies(pars["a"], p, e, x)[0],
+                dtype=float,
+            )
+            omega_phi_si = omega_phi / (pars["M"] * MTSUN_SI)
+            omega_dot_si = np.gradient(omega_phi_si, t, edge_order=1)[0]
+            if np.isfinite(omega_dot_si) and omega_dot_si > 0:
+                return float(omega_dot_si)
+            last_reason = f"non-positive or invalid dOmega_phi/dt={omega_dot_si}"
+        else:
+            last_reason = f"trajectory produced only {t.size} sample(s)"
+        if span_yr >= t_obs_yr:
+            break
+        span_steps *= 2
+
+    raise ValueError(f"Could not estimate a positive dOmega_phi/dt from the local inspiral: {last_reason}.")
+
+
+def _evaluate_kerr_observable_core(pars, inspiral):
+    for name in ("M", "mu", "p0"):
+        _require_positive(name, pars[name])
+    if abs(float(pars["a"])) >= 1.0:
+        raise ValueError(f"Parameter 'a' must satisfy |a| < 1 to use artanh(a), got {pars['a']}.")
+    if not HAS_FEW_GEODESIC:
+        raise ImportError("few.utils.geodesic is not available; Kerr observable basis cannot be built.")
+
+    omega_phi = _as_scalar(get_fundamental_frequencies(pars["a"], pars["p0"], pars["e0"], pars["x0"])[0])
+    omega_phi_si = omega_phi / (pars["M"] * MTSUN_SI)
+    _require_positive("Omega_phi", omega_phi_si)
+
+    p_sep = _as_scalar(get_separatrix(pars["a"], pars["e0"], pars["x0"]))
+    gap = (float(pars["p0"]) - p_sep) / p_sep
+    _require_positive("(p0 - p_sep) / p_sep", gap)
+
+    omega_dot_si = _estimate_omega_phi_dot_si(inspiral, pars)
+
+    basis_values = np.array(
+        [
+            np.log(omega_phi_si),
+            np.log(omega_dot_si),
+            np.log(gap),
+            np.arctanh(float(pars["a"])),
+        ],
+        dtype=float,
+    )
+    diagnostics = {
+        "omega_phi_si": float(omega_phi_si),
+        "omega_dot_si": float(omega_dot_si),
+        "p_sep": float(p_sep),
+        "gap": float(gap),
+    }
+    return basis_values, diagnostics
+
+
+def _safe_eval(eval_fn, theta):
+    try:
+        return np.asarray(eval_fn(theta), dtype=float)
+    except Exception:
+        return None
+
+
+def _build_numeric_du_dtheta(eval_fn, raw_params, raw_values):
+    theta0 = np.asarray(raw_values, dtype=float)
+    base_eval = np.asarray(eval_fn(theta0), dtype=float)
+    jac = np.zeros((base_eval.size, theta0.size), dtype=float)
+
+    for col, (name, value) in enumerate(zip(raw_params, theta0)):
+        step = max(abs(float(value)) * BASIS_REL_STEP, BASIS_ABS_STEP)
+        if name == "a":
+            margin = max(1e-12, 1.0 - abs(float(value)))
+            step = min(step, 0.25 * margin)
+        if step <= 0:
+            raise ValueError(f"Could not construct a positive finite-difference step for parameter '{name}'.")
+
+        deriv = None
+        trial_step = step
+        for _ in range(12):
+            theta_plus = theta0.copy()
+            theta_plus[col] += trial_step
+            theta_minus = theta0.copy()
+            theta_minus[col] -= trial_step
+
+            y_plus = _safe_eval(eval_fn, theta_plus)
+            y_minus = _safe_eval(eval_fn, theta_minus)
+
+            if y_plus is not None and y_minus is not None:
+                deriv = (y_plus - y_minus) / (2.0 * trial_step)
+                break
+            if y_plus is not None:
+                deriv = (y_plus - base_eval) / trial_step
+                break
+            if y_minus is not None:
+                deriv = (base_eval - y_minus) / trial_step
+                break
+            trial_step *= 0.5
+
+        if deriv is None:
+            raise ValueError(
+                f"Failed to evaluate the Kerr observable basis while perturbing '{name}'. "
+                "Try increasing the distance to the separatrix or reducing FISHER_EXP_BASIS_REL_STEP."
+            )
+        jac[:, col] = deriv
+
+    return jac
+
+
+def build_kerr_circular_observable_transform(raw_params, raw_values, wf):
+    if set(raw_params) != {"M", "mu", "a", "p0"} or len(raw_params) != 4:
+        raise ValueError(
+            "FISHER_EXP_BASIS=kerr_circ_observables requires RAW_PARAMS to be exactly M,mu,a,p0."
+        )
+    background = getattr(wf, "_few_background", None)
+    if background != "Kerr":
+        raise ValueError(
+            f"FISHER_EXP_BASIS=kerr_circ_observables requires a Kerr waveform background, got {background!r}."
+        )
+
+    inspiral = _get_inspiral_generator(wf)
+    raw_params = list(raw_params)
+
+    def eval_basis(theta_vector):
+        pars = dict(base.EMRIpars)
+        pars.update(_value_map(raw_params, theta_vector))
+        return _evaluate_kerr_observable_core(pars, inspiral)[0]
+
+    basis_values = eval_basis(raw_values)
+    _, diagnostics = _evaluate_kerr_observable_core(
+        dict(base.EMRIpars, **_value_map(raw_params, raw_values)),
+        inspiral,
+    )
+    du_dtheta = _build_numeric_du_dtheta(eval_basis, raw_params, raw_values)
+    cond_du = np.linalg.cond(du_dtheta)
+    if np.isfinite(cond_du) and cond_du < 1.0 / max(base.PINV_RCOND, 1e-18):
+        jac_theta_wrt_basis = np.linalg.inv(du_dtheta)
+    else:
+        jac_theta_wrt_basis = np.linalg.pinv(du_dtheta, rcond=base.PINV_RCOND)
+
+    basis_params = [
+        BasisParam(name="u1", kind="log", formula="ln(Omega_phi)", linear_ref=diagnostics["omega_phi_si"]),
+        BasisParam(name="u2", kind="log", formula="ln(dOmega_phi/dt)", linear_ref=diagnostics["omega_dot_si"]),
+        BasisParam(
+            name="u3",
+            kind="log",
+            formula="ln((p0 - p_sep(a)) / p_sep(a))",
+            linear_ref=diagnostics["gap"],
+        ),
+        BasisParam(name="u4", kind="artanh", formula="artanh(a)", linear_ref=float(_value_map(raw_params, raw_values)["a"])),
+    ]
+    info_lines = [
+        "Basis Definitions:",
+        "u1: ln(Omega_phi)",
+        "u2: ln(dOmega_phi/dt)",
+        "u3: ln((p0 - p_sep(a)) / p_sep(a))",
+        "u4: artanh(a)",
+        "Fixed Background Values:",
+        f"e0={base.EMRIpars['e0']:.6e}, x0={base.EMRIpars['x0']:.6e}",
+        "Reference Linear Values:",
+        f"Omega_phi={diagnostics['omega_phi_si']:.6e} rad/s",
+        f"dOmega_phi/dt={diagnostics['omega_dot_si']:.6e} rad/s^2",
+        f"p_sep={diagnostics['p_sep']:.6e}",
+        f"gap=(p0-p_sep)/p_sep={diagnostics['gap']:.6e}",
+        f"cond(du/dtheta)={cond_du:.3e}",
+    ]
+    summary = (
+        "Kerr observable basis: rotate from (M, mu, a, p0) to the local coordinates "
+        "(ln Omega_phi, ln dOmega_phi/dt, ln distance-to-separatrix, artanh(a)). "
+        "The Jacobian is built numerically at the injected point, with e0 and x0 held fixed."
+    )
+    return ParamTransform(
+        mode="kerr_circ_observables",
+        raw_params=raw_params,
+        basis_params=basis_params,
+        basis_values=np.asarray(basis_values, dtype=float),
+        jacobian_theta_wrt_basis=np.asarray(jac_theta_wrt_basis, dtype=float),
+        summary=summary,
+        axis_alias_prefix="U",
+        info_lines=info_lines,
+    )
+
+
+def build_transform_from_mode(mode, raw_params, raw_values, wf=None):
     if mode == "physical":
         return build_identity_transform(raw_params, raw_values)
     if mode == "log_all":
@@ -285,16 +518,21 @@ def build_transform_from_mode(mode, raw_params, raw_values):
             CHIRP_M_POWER,
             CHIRP_P0_POWER,
         )
+    if mode in ("kerr_circ_observables", "kerr_observables", "kerr_obs"):
+        if wf is None:
+            raise ValueError("Kerr observable basis requires an EMRIWaveform instance.")
+        return build_kerr_circular_observable_transform(raw_params, raw_values, wf)
     if mode == "eigenbasis":
         raise ValueError("eigenbasis requires a reference Fisher matrix; build it after the step scan.")
     raise ValueError(
         f"Unsupported FISHER_EXP_BASIS='{mode}'. "
-        "Use one of: physical, log_all, log_selected, emri_combo, emri_freq_chirp, eigenbasis."
+        "Use one of: physical, log_all, log_selected, emri_combo, emri_freq_chirp, "
+        "kerr_circ_observables, eigenbasis."
     )
 
 
-def build_transform(raw_params, raw_values):
-    return build_transform_from_mode(BASIS_MODE, raw_params, raw_values)
+def build_transform(raw_params, raw_values, wf=None):
+    return build_transform_from_mode(BASIS_MODE, raw_params, raw_values, wf=wf)
 
 
 def build_transformed_fisher(raw_fisher, transform):
@@ -450,6 +688,19 @@ def _format_basis_constraint(meta, value, sigma):
             f"rel_sigma={rel_text}"
         )
 
+    if meta.kind == "artanh":
+        sigma_linear = np.nan
+        if meta.linear_ref is not None:
+            sigma_linear = (1.0 - float(meta.linear_ref) ** 2) * sigma
+        sigma_linear_text = "n/a" if not np.isfinite(sigma_linear) else f"{sigma_linear:.3e}"
+        linear_text = ""
+        if meta.linear_ref is not None:
+            linear_text = f" | linear_ref={meta.linear_ref:.6e}"
+        return (
+            f"  {meta.name}: value={value:.6e} | sigma={sigma:.6e} | "
+            f"sigma_a_at_ref~={sigma_linear_text}{linear_text}"
+        )
+
     frac_exact = np.expm1(sigma) if sigma < 50 else np.inf
     frac_text = "n/a" if not np.isfinite(frac_exact) else f"{frac_exact:.3e}"
     linear_text = ""
@@ -580,9 +831,9 @@ def main():
     if BASIS_MODE == "eigenbasis":
         if EIGEN_SOURCE_MODE == "eigenbasis":
             raise ValueError("FISHER_EXP_EIGEN_SOURCE cannot itself be 'eigenbasis'.")
-        source_transform = build_transform_from_mode(EIGEN_SOURCE_MODE, RAW_PARAMS, raw_values)
+        source_transform = build_transform_from_mode(EIGEN_SOURCE_MODE, RAW_PARAMS, raw_values, wf=wf)
     else:
-        transform = build_transform(RAW_PARAMS, raw_values)
+        transform = build_transform(RAW_PARAMS, raw_values, wf=wf)
 
     print("=== Run Configuration ===")
     print(f"Experiment script: {Path(__file__).name}")
@@ -596,6 +847,11 @@ def main():
         print(
             "EMRI frequency/chirp exponents: "
             f"alpha={FREQ_P0_ALPHA:.6g}, beta={CHIRP_M_POWER:.6g}, gamma={CHIRP_P0_POWER:.6g}"
+        )
+    if BASIS_MODE in ("kerr_circ_observables", "kerr_observables", "kerr_obs"):
+        print(
+            "Kerr observable basis settings: "
+            f"basis_rel_step={BASIS_REL_STEP:.3e}, fdot_dt={FDOT_DT_SEC:.6g} s, fdot_steps={FDOT_STEPS}"
         )
     if BASIS_MODE == "eigenbasis":
         print(f"Eigenbasis source mode: {EIGEN_SOURCE_MODE}")

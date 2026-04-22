@@ -8,6 +8,8 @@
 # ==================================
 """All available waveforms for different GW sources."""
 
+import os
+
 import numpy as np
 from numpy import sin, cos, sqrt
 from scipy.interpolate import InterpolatedUnivariateSpline as Spline
@@ -595,6 +597,8 @@ class EMRIWaveform(BasicWaveform):
         self.Phi_r0 = Phi_r0
 
         self.wave_func = self._gen_wave_func()
+        wave_gen = getattr(self.wave_func, "waveform_generator", None)
+        self._few_background = getattr(wave_gen, "background", None)
         self.theta, self.phi = self.wave_func._get_viewing_angles(qS, phiS, qK, phiK)  # get view angle
         BasicWaveform.__init__(self, M, mu, T_obs, dist*1000., Lambda=self.phi, Beta=PI_2-self.theta, **kwargs)
 
@@ -643,7 +647,10 @@ class EMRIWaveform(BasicWaveform):
         import few
         from few.waveform import GenerateEMRIWaveform
 
-        model = "FastSchwarzschildEccentricFlux"
+        model = os.getenv("GWSPACE_EMRI_MODEL", "FastSchwarzschildEccentricFlux").strip()
+        if not model:
+            model = "FastSchwarzschildEccentricFlux"
+        self._few_model_name = model
 
         # FEW 2.0：先选择后端（cpu / cuda11x / cuda12x）
         backend = self._select_backend()
@@ -651,7 +658,10 @@ class EMRIWaveform(BasicWaveform):
 
         
         inspiral_kwargs = {}
-        amplitude_kwargs = {"buffer_length": 1000}
+        amplitude_kwargs = {}
+        if model in {"FastSchwarzschildEccentricFlux", "FastSchwarzschildEccentricFluxBicubic"}:
+            # RomanAmplitude accepts buffer_length; Kerr AmpInterp2D does not.
+            amplitude_kwargs["buffer_length"] = 1000
         # FEW 2.0 uses include_minus_m instead of assume_positive_m
         Ylm_kwargs = {"include_minus_m": True}
         sum_kwargs = {"pad_output": False}

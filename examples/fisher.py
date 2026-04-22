@@ -69,14 +69,14 @@ T_OBS_YR = float(os.getenv("FISHER_TOBS_YR", "5.0"))
 EMRIpars = {
     "M": 4.3e6,
     "mu": 40.0,
-    "a": 0.5,
+    "a": 0.9,
     "p0": 9.0,
     "e0": 0.0,
     "x0": 1.0,
     "qS": 1.66,
     "phiS": 4.71,
-    "qK": 0.2,
-    "phiK": 0.2,
+    "qK": 1.7,
+    "phiK": 1.0,
     "dist": 8.0e-6,
     "Phi_phi0": 0.0,
     "Phi_theta0": 0.0,
@@ -836,6 +836,19 @@ def plot_corner_from_records(
 def main():
     """执行 EMRI Fisher 步长扫描并输出稳定性诊断信息。"""
     wf = EMRIWaveform(**EMRIpars)
+    model_name = getattr(wf, "_few_model_name", "unknown")
+    background = getattr(wf, "_few_background", "unknown")
+    spin_params = sorted(set(PARAMS).intersection({"a", "qK", "phiK"}))
+    if background == "Schwarzschild" and spin_params:
+        raise ValueError(
+            "Current EMRI waveform uses a Schwarzschild background "
+            f"({model_name}), so spin-related parameter(s) {spin_params} are not physical. "
+            "Set GWSPACE_EMRI_MODEL=FastKerrEccentricEquatorialFlux or remove those parameters."
+        )
+    if model_name == "FastKerrEccentricEquatorialFlux" and not np.isclose(abs(wf.x0), 1.0):
+        raise ValueError(
+            "FastKerrEccentricEquatorialFlux assumes equatorial orbits, so x0 must be +1 or -1."
+        )
     adapter = EMRIAETAdapter(
         wf,
         dt=DT,
@@ -866,6 +879,7 @@ def main():
     for name in PARAMS:
         print(f"  {name}")
     print("Frequency / solver setup:")
+    print(f"  waveform_model={model_name}, background={background}")
     print(
         f"  T_obs={wf.T_obs / YRSID_SI:.4f} yr | DT={DT:.3f} s | "
         f"FMIN={FMIN:.3e} Hz | FMAX={FMAX:.3e} Hz"

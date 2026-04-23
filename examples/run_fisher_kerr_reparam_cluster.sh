@@ -4,7 +4,8 @@
 # Typical use:
 #   sbatch examples/run_fisher_kerr_reparam_cluster.sh
 #   FISHER_TOBS_YR=5.0 sbatch examples/run_fisher_kerr_reparam_cluster.sh
-#   FISHER_REL_STEPS=3e-8,1e-7,3e-7 FISHER_CORNER_TAG=T5p000yr_kerr_obs sbatch examples/run_fisher_kerr_reparam_cluster.sh
+#   FISHER_STEP_MODE=relative FISHER_REL_STEPS=3e-8,1e-7,3e-7 FISHER_CORNER_TAG=T5p000yr_kerr_obs sbatch examples/run_fisher_kerr_reparam_cluster.sh
+#   FISHER_STEP_MODE=absolute FISHER_PARAM_STEPS=M=1.0,mu=4e-5,a=1e-5,p0=3e-5 FISHER_STEP_SCALES=0.3,1.0,3.0 sbatch examples/run_fisher_kerr_reparam_cluster.sh
 
 #SBATCH -J tq_emri_reparam
 #SBATCH -p cpu_part
@@ -30,7 +31,7 @@ export GWSPACE_EMRI_MODEL="${GWSPACE_EMRI_MODEL:-FastKerrEccentricEquatorialFlux
 export FISHER_TOBS_YR="${FISHER_TOBS_YR:-5.0}"
 export FISHER_DT="${FISHER_DT:-20.0}"
 export FISHER_PARAMS="${FISHER_PARAMS:-M,mu,a,p0}"
-export FISHER_REL_STEPS="${FISHER_REL_STEPS:-3e-8,1e-7,3e-7}"
+export FISHER_STEP_MODE="${FISHER_STEP_MODE:-relative}"
 export FISHER_MAX_BINS="${FISHER_MAX_BINS:-400000}"
 export FISHER_ENABLE_SCALED="${FISHER_ENABLE_SCALED:-1}"
 export FISHER_CORNER_DIR="${FISHER_CORNER_DIR:-$FISHER_OUT_DIR/reparam}"
@@ -50,6 +51,23 @@ export FEW_FILE_STORAGE_PATH="${FEW_FILE_STORAGE_PATH:-$RUN_ROOT/few_data}"
 export FEW_FILE_DOWNLOAD_PATH="${FEW_FILE_DOWNLOAD_PATH:-$RUN_ROOT/few_data/download}"
 export MPLBACKEND="${MPLBACKEND:-Agg}"
 export MPLCONFIGDIR="${MPLCONFIGDIR:-$RUN_ROOT/.mplconfig}"
+
+case "$FISHER_STEP_MODE" in
+  relative)
+    export FISHER_REL_STEPS="${FISHER_REL_STEPS:-3e-8,1e-7,3e-7}"
+    export FISHER_PARAM_STEPS=""
+    export FISHER_STEP_SCALES=""
+    ;;
+  absolute)
+    export FISHER_REL_STEPS="${FISHER_REL_STEPS:-1e-6}"
+    export FISHER_PARAM_STEPS="${FISHER_PARAM_STEPS:-M=1.0,mu=4e-5,a=1e-5,p0=3e-5}"
+    export FISHER_STEP_SCALES="${FISHER_STEP_SCALES:-0.3,1.0,3.0}"
+    ;;
+  *)
+    echo "Unsupported FISHER_STEP_MODE=$FISHER_STEP_MODE (expected: relative or absolute)." >&2
+    exit 2
+    ;;
+esac
 
 mkdir -p "$LOG_DIR" "$FISHER_OUT_DIR" "$FISHER_CORNER_DIR" "$MPLCONFIGDIR" "$FEW_FILE_DOWNLOAD_PATH"
 cd "$PROJECT_ROOT"
@@ -71,7 +89,10 @@ echo "GWSPACE_EMRI_MODEL: $GWSPACE_EMRI_MODEL"
 echo "FISHER_TOBS_YR: $FISHER_TOBS_YR"
 echo "FISHER_DT: $FISHER_DT"
 echo "FISHER_PARAMS: $FISHER_PARAMS"
+echo "FISHER_STEP_MODE: $FISHER_STEP_MODE"
 echo "FISHER_REL_STEPS: $FISHER_REL_STEPS"
+echo "FISHER_PARAM_STEPS: $FISHER_PARAM_STEPS"
+echo "FISHER_STEP_SCALES: $FISHER_STEP_SCALES"
 echo "FISHER_MAX_BINS: $FISHER_MAX_BINS"
 echo "FISHER_ENABLE_SCALED: $FISHER_ENABLE_SCALED"
 echo "FISHER_CORNER_DIR: $FISHER_CORNER_DIR"

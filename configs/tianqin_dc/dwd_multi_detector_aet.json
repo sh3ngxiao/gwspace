@@ -1,0 +1,23 @@
+{
+  "dataset": {
+    "name": "tianqin_dc_dwd_multi_detector_aet",
+    "description": "Generate DWD A/E/T time-domain responses for TQ, Taiji, and LISA from the selected DWD catalog source."
+  },
+  "source_config": "configs/tianqin_dc/dwd_catalog_simple.json",
+  "detectors": [
+    "TQ",
+    "Taiji",
+    "LISA"
+  ],
+  "observation": {
+    "duration_s": 63072000.0,
+    "sample_rate_hz": 0.2
+  },
+  "output": {
+    "directory": "outputs/multi_detector_aet/dwd_catalog_simple",
+    "prefix": "dwd_catalog_simple_multi_detector_aet"
+  },
+  "plot": {
+    "max_points": 20000
+  }
+}

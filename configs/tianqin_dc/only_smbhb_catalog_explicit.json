@@ -1,0 +1,28 @@
+{
+  "dataset": {
+    "name": "tianqin_dc_only_smbhb_catalog",
+    "description": "SMBHB-only TianQin XYZ dataset generated from the validated MBHB catalog."
+  },
+  "seed": 20260424,
+  "catalog": {
+    "path": "tianqin_dc/codes/mbhb_catalogs/tianqin_mbhb_catalog_v1.csv",
+    "rows_per_file": 12,
+    "selection": "first"
+  },
+  "observation": {
+    "duration_s": 32768.0,
+    "sample_rate_hz": 0.25,
+    "detector": "TQ",
+    "tdi_generation": 1,
+    "use_gpu": false
+  },
+  "output": {
+    "path": "outputs/tianqin_dc_only_smbhb_catalog.h5",
+    "overwrite": true,
+    "compression": "gzip",
+    "compression_level": 4
+  },
+  "smbhb": {
+    "seconds_per_year": 31558149.763545603
+  }
+}

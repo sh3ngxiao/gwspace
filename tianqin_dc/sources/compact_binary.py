@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from pathlib import Path
+import sys
 from typing import Any
 
 from gwspace.Waveform import waveforms
@@ -9,6 +11,21 @@ from tianqin_dc.config import ObservationConfig
 from tianqin_dc.models import SourceGenerationResult
 from tianqin_dc.response import generate_tdi_channels_fd
 from tianqin_dc.sources.base import SourceFactory
+
+
+def _ensure_local_pyeccentricfd_path() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    build_root = repo_root / "pyEccentricFD" / "build"
+    if not build_root.exists():
+        return
+
+    for candidate in sorted(build_root.glob("lib.*")):
+        if not (candidate / "pyEccentricFD").exists():
+            continue
+        candidate_str = str(candidate)
+        if candidate_str not in sys.path:
+            sys.path.insert(0, candidate_str)
+        return
 
 
 class GWspaceCompactBinaryFactory(SourceFactory):
@@ -63,6 +80,8 @@ class GWspaceCompactBinaryFactory(SourceFactory):
         wave_parameters.pop("engine", None)
         if engine == "bhb_PhenomD":
             wave_parameters.pop("eccentricity", None)
+        elif engine == "bhb_EccFD":
+            _ensure_local_pyeccentricfd_path()
         return waveforms[engine](**wave_parameters)
 
     def _engine_specific_notes(self, engine: str, requested_kind: str) -> list[str]:
@@ -97,7 +116,7 @@ class GWspaceCompactBinaryFactory(SourceFactory):
                     notes=self._engine_specific_notes(engine, self.kind),
                     metadata=metadata,
                 )
-            except (ImportError, ModuleNotFoundError) as exc:
+            except (ImportError, ModuleNotFoundError, AttributeError, NameError, OSError, RuntimeError, TypeError, ValueError) as exc:
                 last_error = exc
                 continue
 

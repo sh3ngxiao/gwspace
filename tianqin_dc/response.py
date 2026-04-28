@@ -98,19 +98,18 @@ def rfft_spectrum_to_time_series(
     )
 
 
-def generate_tdi_channels_fd(
+def _generate_tdi_fd(
     waveform: Any,
     observation: ObservationConfig,
     *,
+    channel: str,
     response_kwargs: dict[str, Any] | None = None,
-) -> dict[str, np.ndarray]:
-    """Generate TianQin A/E/T channels for a single source from a FD response."""
-
+) -> tuple[np.ndarray, np.ndarray]:
     kwargs = dict(response_kwargs or {})
     full_freq, positive_freq = response_frequency_grid(observation)
     response = waveform.get_tdi_response(
         f_series=positive_freq,
-        channel="AET",
+        channel=channel,
         det=observation.detector,
         TDIgen=observation.tdi_generation,
         **kwargs,
@@ -124,7 +123,7 @@ def generate_tdi_channels_fd(
 
     fd_channels = np.asarray(fd_channels, dtype=np.complex128)
     if fd_channels.shape[0] != 3:
-        raise ValueError(f"Expected three A/E/T FD channels, got shape {fd_channels.shape}.")
+        raise ValueError(f"Expected three {channel} FD channels, got shape {fd_channels.shape}.")
     if fd_channels.shape[1] != freq_out.shape[0]:
         raise ValueError("FD response and frequency grid lengths do not match.")
 
@@ -135,13 +134,40 @@ def generate_tdi_channels_fd(
     if np.any(valid):
         full_spectrum[:, freq_bins[valid]] = fd_channels[:, valid]
 
-    td_channels = rfft_spectrum_to_time_series(full_spectrum, observation)
+    return rfft_spectrum_to_time_series(full_spectrum, observation), freq_out
+
+
+def generate_tdi_channels_fd(
+    waveform: Any,
+    observation: ObservationConfig,
+    *,
+    response_kwargs: dict[str, Any] | None = None,
+) -> dict[str, np.ndarray]:
+    """Generate TianQin A/E/T channels for a single source from a FD response."""
+
+    td_channels, _ = _generate_tdi_fd(waveform, observation, channel="AET", response_kwargs=response_kwargs)
     full = {
         "A": td_channels[0],
         "E": td_channels[1],
         "T": td_channels[2],
     }
     return _select_channels(full, observation)
+
+
+def generate_tdi_xyz_fd(
+    waveform: Any,
+    observation: ObservationConfig,
+    *,
+    response_kwargs: dict[str, Any] | None = None,
+) -> dict[str, np.ndarray]:
+    """Generate TianQin X/Y/Z channels for a single source from a FD response."""
+
+    td_channels, _ = _generate_tdi_fd(waveform, observation, channel="XYZ", response_kwargs=response_kwargs)
+    return {
+        "X": td_channels[0],
+        "Y": td_channels[1],
+        "Z": td_channels[2],
+    }
 
 
 def generate_tdi_channels(

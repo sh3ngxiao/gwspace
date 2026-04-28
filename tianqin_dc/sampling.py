@@ -30,6 +30,17 @@ def sample_value(spec: SamplerConfig, rng: np.random.Generator) -> Any:
         cos_high = float(np.cos(high))
         return float(np.arccos(rng.uniform(cos_high, cos_low)))
 
+    if distribution == "isotropic_latitude":
+        low = -float(np.pi) / 2.0 if spec.low is None else float(spec.low)
+        high = float(np.pi) / 2.0 if spec.high is None else float(spec.high)
+        if not (-float(np.pi) / 2.0 <= low <= float(np.pi) / 2.0 and -float(np.pi) / 2.0 <= high <= float(np.pi) / 2.0):
+            raise ValueError("Isotropic latitude sampler bounds must lie within [-pi/2, pi/2].")
+        if high < low:
+            raise ValueError("Isotropic latitude sampler requires high >= low.")
+        sin_low = float(np.sin(low))
+        sin_high = float(np.sin(high))
+        return float(np.arcsin(rng.uniform(sin_low, sin_high)))
+
     if distribution == "loguniform":
         if spec.low is None or spec.high is None:
             raise ValueError("Loguniform sampler requires 'low' and 'high'.")

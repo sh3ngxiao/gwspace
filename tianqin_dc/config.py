@@ -9,7 +9,7 @@ import numpy as np
 
 
 SUPPORTED_CHANNELS = ("A", "E", "T")
-SUPPORTED_DETECTORS = ("TQ", "TianQin")
+SUPPORTED_DETECTORS = ("TQ", "TianQin", "LISA", "Taiji")
 SUPPORTED_TDI_GENERATIONS = (1, 2)
 
 

@@ -1,0 +1,31 @@
+{
+  "dataset": {
+    "name": "tianqin_dc_smbhb_multi_detector_aet",
+    "description": "Generate SMBHB A/E/T time-domain responses for TQ, Taiji, and LISA from the selected MBHB catalog sources."
+  },
+  "source_config": "configs/tianqin_dc/only_smbhb_catalog_explicit.json",
+  "source_config_overrides": {
+    "catalog": {
+      "row_numbers": [
+        1
+      ],
+      "rows_per_file": null
+    }
+  },
+  "detectors": [
+    "TQ",
+    "Taiji",
+    "LISA"
+  ],
+  "observation": {
+    "duration_s": 63072000.0,
+    "sample_rate_hz": 0.2
+  },
+  "output": {
+    "directory": "outputs/multi_detector_aet/smbhb_catalog",
+    "prefix": "smbhb_catalog_multi_detector_aet"
+  },
+  "plot": {
+    "max_points": 20000
+  }
+}

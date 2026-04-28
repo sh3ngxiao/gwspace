@@ -55,6 +55,25 @@ def _parse_csv_strings(text):
     return values
 
 
+def _parse_named_floats(text):
+    """将 `name=value` 形式的逗号分隔字符串解析为浮点数字典。"""
+    items = [x.strip() for x in text.split(",") if x.strip()]
+    if not items:
+        raise ValueError("empty named-float csv")
+
+    out = {}
+    for item in items:
+        if "=" not in item:
+            raise ValueError(f"invalid named float item {item!r}, expected name=value")
+        name, value = item.split("=", 1)
+        name = name.strip()
+        value = value.strip()
+        if not name:
+            raise ValueError(f"invalid named float item {item!r}, empty name")
+        out[name] = float(value)
+    return out
+
+
 def _env_flag(name, default=True):
     """读取环境变量中的布尔开关。"""
     raw = os.getenv(name)
@@ -90,6 +109,9 @@ FMIN = 1e-4
 FMAX = 1e-2
 PARAMS = _parse_csv_strings(os.getenv("FISHER_PARAMS", "M,mu"))
 REL_STEPS = _parse_csv_floats(os.getenv("FISHER_REL_STEPS", "1e-6,1e-5,1e-4"))  # 用于收敛性检查
+_PARAM_STEPS_RAW = os.getenv("FISHER_PARAM_STEPS", "").strip()
+PARAM_STEPS = _parse_named_floats(_PARAM_STEPS_RAW) if _PARAM_STEPS_RAW else {}
+STEP_SCALES = _parse_csv_floats(os.getenv("FISHER_STEP_SCALES", "1.0")) if PARAM_STEPS else []
 USE_T = False
 WINDOW_ALPHA = 0.1
 MAX_FREQ_BINS = int(os.getenv("FISHER_MAX_BINS", "120000"))  # 降低频点数，避免 5 年数据直接 OOM/超时
@@ -426,6 +448,79 @@ def build_param_value_map(params, param_values):
     return {p: float(v) for p, v in zip(params, param_values)}
 
 
+def validate_param_steps(params, step_map):
+    """校验自定义有限差分步长配置。"""
+    if not step_map:
+        return
+
+    extra = sorted(set(step_map) - set(params))
+    missing = [p for p in params if p not in step_map]
+    if extra:
+        raise ValueError(
+            "FISHER_PARAM_STEPS contains parameter(s) not present in FISHER_PARAMS: "
+            + ", ".join(extra)
+        )
+    if missing:
+        raise ValueError(
+            "FISHER_PARAM_STEPS must provide every active Fisher parameter when enabled. Missing: "
+            + ", ".join(missing)
+        )
+
+    invalid = [name for name, value in step_map.items() if not np.isfinite(value) or value <= 0]
+    if invalid:
+        raise ValueError(
+            "FISHER_PARAM_STEPS must be finite and positive for all parameters. Invalid: "
+            + ", ".join(invalid)
+        )
+
+
+def format_step_map(step_map, params):
+    """按参数顺序格式化步长字典。"""
+    return ", ".join(f"{name}={float(step_map[name]):.3e}" for name in params if name in step_map)
+
+
+def build_scan_configs(params):
+    """构建步长扫描配置列表。"""
+    if not PARAM_STEPS:
+        return [
+            {
+                "step_mode": "relative",
+                "scan_value": float(rel_step),
+                "step": None,
+                "rel_step": float(rel_step),
+            }
+            for rel_step in REL_STEPS
+        ]
+
+    validate_param_steps(params, PARAM_STEPS)
+    if not STEP_SCALES:
+        raise ValueError("FISHER_STEP_SCALES must not be empty when FISHER_PARAM_STEPS is enabled.")
+
+    return [
+        {
+            "step_mode": "absolute",
+            "scan_value": float(scale),
+            "step": {name: float(PARAM_STEPS[name]) * float(scale) for name in params},
+            "rel_step": float(REL_STEPS[0]) if REL_STEPS else 1e-6,
+        }
+        for scale in STEP_SCALES
+    ]
+
+
+def step_label(rec):
+    """格式化当前扫描记录的步长标签。"""
+    if rec.get("step_mode") == "absolute":
+        return f"step_scale={float(rec['scan_value']):.3g}"
+    return f"rel_step={float(rec['scan_value']):.1e}"
+
+
+def reference_step_label(rec):
+    """格式化参考步长标签。"""
+    if rec.get("step_mode") == "absolute":
+        return f"reference_step_scale={float(rec['scan_value']):.3g}"
+    return f"reference_rel_step={float(rec['scan_value']):.1e}"
+
+
 def relative_sigma_from_values(sigma_map, value_map):
     """根据注入值计算相对误差 sigma / |theta|。"""
     out = {}
@@ -459,8 +554,9 @@ def choose_preferred_record(records, enable_scaled):
     策略:
     1) 优先 full-rank；
     2) 优先条件数有限；
-    3) 优先与相邻步长/参考步长更一致；
-    4) 若仍并列，取更小的 rel_step。
+    3) 优先与相邻步长更一致；
+    4) 其次参考与全局参考步长的一致性；
+    5) 若仍并列，取更小的扫描步长。
     """
     if not records:
         raise ValueError("records must not be empty.")
@@ -479,13 +575,24 @@ def choose_preferred_record(records, enable_scaled):
         metrics = rec["metrics"]
         if metrics[sigma_key] is None:
             continue
+        neighbor_deltas = []
         stability_prev = rec.get(delta_prev_key, np.nan)
-        stability = stability_prev if np.isfinite(stability_prev) else rec.get(delta_ref_key, np.inf)
+        if np.isfinite(stability_prev):
+            neighbor_deltas.append(float(stability_prev))
+        if idx + 1 < len(records):
+            next_prev = records[idx + 1].get(delta_prev_key, np.nan)
+            if np.isfinite(next_prev):
+                neighbor_deltas.append(float(next_prev))
+        neighbor_stability = max(neighbor_deltas) if neighbor_deltas else np.inf
+        ref_stability = rec.get(delta_ref_key, np.inf)
+        if not np.isfinite(ref_stability):
+            ref_stability = np.inf
         key = (
             0 if metrics[rank_key] == n_params else 1,
             0 if np.isfinite(metrics[cond_key]) else 1,
-            float(stability),
-            float(rec["rel_step"]),
+            float(neighbor_stability),
+            float(ref_stability),
+            float(rec["scan_value"]),
             idx,
         )
         if best_key is None or key < best_key:
@@ -508,15 +615,16 @@ def format_corr_matrix(corr, params):
     return lines
 
 
-def build_verdict(rec, enable_scaled, n_params):
+def build_verdict(rec, enable_scaled, n_params, stable_delta=None):
     """根据条件数/秩/收敛性生成一句简短结论。"""
     suffix = active_metric_suffix(enable_scaled)
     metrics = rec["metrics"]
     cond = metrics[f"cond_{suffix}"]
     rank = metrics[f"rank_{suffix}"]
-    delta_ref = rec[f"delta_sigma_{suffix}_ref"]
-    delta_prev = rec[f"delta_sigma_{suffix}_prev"]
-    stable_delta = delta_prev if np.isfinite(delta_prev) else delta_ref
+    if stable_delta is None:
+        delta_ref = rec[f"delta_sigma_{suffix}_ref"]
+        delta_prev = rec[f"delta_sigma_{suffix}_prev"]
+        stable_delta = delta_prev if np.isfinite(delta_prev) else delta_ref
 
     level = "OK"
     reason = "step scan looks numerically stable"
@@ -533,11 +641,11 @@ def build_verdict(rec, enable_scaled, n_params):
         reason = f"{suffix} Fisher is ill-conditioned"
     elif np.isfinite(stable_delta) and stable_delta > 1e-2:
         level = "Caution"
-        reason = f"{suffix} sigma has only marginal rel_step convergence"
+        reason = f"{suffix} sigma has only marginal step convergence"
 
     delta_text = "n/a" if not np.isfinite(stable_delta) else f"{stable_delta:.3e}"
     return (
-        f"[{level}] Preferred report uses rel_step={rec['rel_step']:.1e}; "
+        f"[{level}] Preferred report uses {step_label(rec)}; "
         f"{reason} (cond_{suffix}={cond:.3e}, rank_{suffix}={rank}/{n_params}, "
         f"dSigma_{suffix}={delta_text})."
     )
@@ -659,7 +767,7 @@ def plot_corner_from_records(
     图形含义:
     - 对角线: 每个参数的一维高斯近似后验；
     - 下三角: 参数两两的 1σ/2σ 误差椭圆；
-    - 叠加多条曲线用于比较不同 rel_step 的结果。
+    - 叠加多条曲线用于比较不同扫描步长的结果。
     """
     try:
         import contextlib
@@ -792,11 +900,11 @@ def plot_corner_from_records(
             elif j != 0:
                 ax.set_yticklabels([])
 
-    # 图例：优先用环境变量标签，不足时自动补 rel_step。
+    # 图例：优先用环境变量标签，不足时自动补当前扫描步长标签。
     labels = list(model_labels or [])
     while len(labels) < len(series):
         idx = len(labels)
-        labels.append(f"rel_step={series[idx]['rec']['rel_step']:.1e}")
+        labels.append(step_label(series[idx]["rec"]))
     labels = labels[:len(series)]
 
     from matplotlib.lines import Line2D
@@ -892,15 +1000,22 @@ def main():
         f"  PINV_RCOND={PINV_RCOND:.1e}, ENABLE_SCALED_FISHER={ENABLE_SCALED_FISHER}, "
         f"SCALE_MODE={SCALE_MODE}, PRIOR_REL={PRIOR_REL:.3e}"
     )
-    print(f"  REL_STEPS={REL_STEPS}")
+    if PARAM_STEPS:
+        print("  step_mode=absolute")
+        print(f"  FISHER_PARAM_STEPS={format_step_map(PARAM_STEPS, PARAMS)}")
+        print(f"  FISHER_STEP_SCALES={STEP_SCALES}")
+    else:
+        print("  step_mode=relative")
+        print(f"  REL_STEPS={REL_STEPS}")
     if n_time > 2_000_000:
         print("[Warning] Time samples are very large; runtime may still be long.")
 
     records = []
     param_values = np.array([get_param_value(wf, p) for p in PARAMS], dtype=float)
     param_value_map = build_param_value_map(PARAMS, param_values)
+    scan_configs = build_scan_configs(PARAMS)
     # 有限差分步长扫描：评估 Fisher/sigma 的数值稳定性。
-    for rel_step in REL_STEPS:
+    for cfg in scan_configs:
         result = fisher_matrix(
             adapter,
             params=PARAMS,
@@ -910,7 +1025,8 @@ def main():
             f_series=f_series,
             noise=TianQinNoise(),
             use_T=USE_T,
-            rel_step=rel_step,
+            step=cfg["step"],
+            rel_step=cfg["rel_step"],
         )
         metrics = analyze_fisher_matrix(
             result["fisher"],
@@ -921,9 +1037,18 @@ def main():
             scale_mode=SCALE_MODE,
             prior_rel=PRIOR_REL,
         )
-        records.append({"rel_step": rel_step, "result": result, "metrics": metrics})
+        result["frequency_size"] = len(f_series)
+        records.append(
+            {
+                "step_mode": cfg["step_mode"],
+                "scan_value": cfg["scan_value"],
+                "step_map": cfg["step"],
+                "result": result,
+                "metrics": metrics,
+            }
+        )
 
-    reference = records[0]  # 以最小步长作为参考
+    reference = records[0]
     # 同时比较“相对参考步长”与“相对前一档步长”的变化。
     for i, rec in enumerate(records):
         rec["delta_fisher_ref"] = relative_fisher_change(rec["result"]["fisher"], reference["result"]["fisher"])
@@ -972,12 +1097,12 @@ def main():
     delta_prev_map_key = f"delta_sigma_{suffix}_prev_map"
 
     print("\n=== Step-Scan Summary ===")
-    print(f"Report mode: {suffix} | reference_rel_step={reference['rel_step']:.1e}")
+    print(f"Report mode: {suffix} | {reference_step_label(reference)}")
     for rec in records:
         res = rec["result"]
         met = rec["metrics"]
         print(
-            f"rel_step={rec['rel_step']:.1e} | "
+            f"{step_label(rec)} | "
             f"SNR={res['snr']:.6e} | "
             f"cond_{suffix}={met[cond_key]:.3e} | "
             f"rank_{suffix}={met[rank_key]}/{len(PARAMS)} | "
@@ -987,6 +1112,8 @@ def main():
             f"dF_prev={rec['delta_fisher_prev']:.3e} | "
             f"dSigma_{suffix}_prev={rec[delta_prev_key]:.3e}"
         )
+        if rec["step_map"] is not None:
+            print(f"  step_abs: {format_step_map(rec['step_map'], PARAMS)}")
         if met["prior_sigmas"] is not None:
             print(f"  prior_sigmas={met['prior_sigmas']}")
         sigma_active = met[sigma_key]
@@ -1017,9 +1144,11 @@ def main():
 
     print("\n=== Preferred Report ===")
     print(
-        f"rel_step={preferred['rel_step']:.1e} | mode={suffix} | "
+        f"{step_label(preferred)} | mode={suffix} | "
         f"SNR={preferred_result['snr']:.6e} | frequency_size={frequency_size}"
     )
+    if preferred["step_map"] is not None:
+        print(f"Selected absolute steps: {format_step_map(preferred['step_map'], PARAMS)}")
     print("Parameter constraints:")
     for name in PARAMS:
         rel_val = rel_sigma[name]
@@ -1055,7 +1184,21 @@ def main():
                 print(f"  {line}")
 
     print("\n=== Verdict ===")
-    print(build_verdict(preferred, ENABLE_SCALED_FISHER, len(PARAMS)))
+    preferred_idx = records.index(preferred)
+    preferred_neighbor_deltas = []
+    preferred_prev = preferred.get(delta_prev_key, np.nan)
+    if np.isfinite(preferred_prev):
+        preferred_neighbor_deltas.append(float(preferred_prev))
+    if preferred_idx + 1 < len(records):
+        next_prev = records[preferred_idx + 1].get(delta_prev_key, np.nan)
+        if np.isfinite(next_prev):
+            preferred_neighbor_deltas.append(float(next_prev))
+    preferred_stability = (
+        max(preferred_neighbor_deltas)
+        if preferred_neighbor_deltas
+        else preferred.get(delta_ref_key, np.inf)
+    )
+    print(build_verdict(preferred, ENABLE_SCALED_FISHER, len(PARAMS), stable_delta=preferred_stability))
 
     last = records[-1]["metrics"]
     if PRIOR_REL > 0:

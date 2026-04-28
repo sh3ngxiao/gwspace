@@ -547,11 +547,12 @@ def _select_reference_record(records, rel_step_override):
         return records[0]
     tol = max(1e-18, abs(rel_step_override) * 1e-9)
     for rec in records:
-        if abs(rec["rel_step"] - rel_step_override) <= tol:
+        scan_value = float(rec.get("scan_value", rec.get("rel_step")))
+        if abs(scan_value - rel_step_override) <= tol:
             return rec
-    available = ", ".join(f"{rec['rel_step']:.1e}" for rec in records)
+    available = ", ".join(base.step_label(rec) for rec in records)
     raise ValueError(
-        f"FISHER_EXP_EIGEN_REF_STEP={rel_step_override:.6g} does not match any scanned rel_step. "
+        f"FISHER_EXP_EIGEN_REF_STEP={rel_step_override:.6g} does not match any scanned step value. "
         f"Available values: {available}"
     )
 
@@ -606,7 +607,7 @@ def build_eigenbasis_transform(source_transform, source_record):
 
     summary = (
         "Eigenbasis from the covariance principal axes of the source transformed basis "
-        f"'{source_transform.mode}' at rel_step={source_record['rel_step']:.1e}. "
+        f"'{source_transform.mode}' at {base.step_label(source_record)}. "
         "C1 is the loosest direction; later axes are progressively tighter."
     )
     return ParamTransform(
@@ -658,12 +659,12 @@ def print_step_scan_summary(records, enable_scaled, title):
     sigma_key = f"sigma_{suffix}"
 
     print(f"\n=== {title} ===")
-    print(f"Report mode: {suffix} | reference_rel_step={records[0]['rel_step']:.1e}")
+    print(f"Report mode: {suffix} | {base.reference_step_label(records[0])}")
     for rec in records:
         met = rec["metrics"]
         res = rec["result"]
         print(
-            f"rel_step={rec['rel_step']:.1e} | "
+            f"{base.step_label(rec)} | "
             f"SNR={res['snr']:.6e} | "
             f"cond_{suffix}={met[cond_key]:.3e} | "
             f"rank_{suffix}={met[rank_key]}/{len(res['params'])} | "
@@ -672,6 +673,8 @@ def print_step_scan_summary(records, enable_scaled, title):
             f"dF_prev={rec['delta_fisher_prev']:.3e} | "
             f"dSigma_{suffix}_prev={rec[delta_prev_key]:.3e}"
         )
+        if rec.get("step_map") is not None:
+            print(f"  step_abs: {base.format_step_map(rec['step_map'], list(rec['step_map']))}")
         sigma_text = ", ".join(f"{p}={met[sigma_key][p]:.3e}" for p in res["params"])
         print(f"  sigma_{suffix}: {sigma_text}")
 
@@ -728,11 +731,13 @@ def print_preferred_report(records, enable_scaled, transform, title):
 
     print(f"\n=== {title} ===")
     print(
-        f"rel_step={preferred['rel_step']:.1e} | "
+        f"{base.step_label(preferred)} | "
         f"SNR={result['snr']:.6e} | "
         f"cond_{suffix}={metrics[cond_key]:.3e} | "
         f"rank_{suffix}={metrics[rank_key]}/{len(result['params'])}"
     )
+    if preferred.get("step_map") is not None:
+        print(f"Selected absolute steps: {base.format_step_map(preferred['step_map'], list(preferred['step_map']))}")
     print("Parameter constraints:")
     for meta, value in zip(transform.basis_params, transform.basis_values):
         print(_format_basis_constraint(meta, value, sigma_map[meta.name]))
@@ -759,7 +764,21 @@ def print_preferred_report(records, enable_scaled, transform, title):
         f"dF_prev={preferred['delta_fisher_prev']:.3e} | "
         f"dSigma_{suffix}_prev={preferred[delta_prev_key]:.3e}"
     )
-    print(base.build_verdict(preferred, enable_scaled, len(result["params"])))
+    preferred_idx = records.index(preferred)
+    preferred_neighbor_deltas = []
+    preferred_prev = preferred.get(delta_prev_key, np.nan)
+    if np.isfinite(preferred_prev):
+        preferred_neighbor_deltas.append(float(preferred_prev))
+    if preferred_idx + 1 < len(records):
+        next_prev = records[preferred_idx + 1].get(delta_prev_key, np.nan)
+        if np.isfinite(next_prev):
+            preferred_neighbor_deltas.append(float(next_prev))
+    preferred_stability = (
+        max(preferred_neighbor_deltas)
+        if preferred_neighbor_deltas
+        else preferred.get(delta_ref_key, np.inf)
+    )
+    print(base.build_verdict(preferred, enable_scaled, len(result["params"]), stable_delta=preferred_stability))
     return preferred
 
 
@@ -826,6 +845,7 @@ def main():
         max_bins=base.MAX_FREQ_BINS,
     )
     raw_values = np.array([base.get_param_value(wf, p) for p in RAW_PARAMS], dtype=float)
+    scan_configs = base.build_scan_configs(RAW_PARAMS)
     source_transform = None
     transform = None
     if BASIS_MODE == "eigenbasis":
@@ -856,9 +876,9 @@ def main():
     if BASIS_MODE == "eigenbasis":
         print(f"Eigenbasis source mode: {EIGEN_SOURCE_MODE}")
         if EIGEN_REF_STEP is None:
-            print(f"Eigenbasis reference rel_step: first scanned step ({base.REL_STEPS[0]:.1e})")
+            print(f"Eigenbasis reference step: first scanned step ({base.step_label(scan_configs[0])})")
         else:
-            print(f"Eigenbasis reference rel_step: {EIGEN_REF_STEP:.1e}")
+            print(f"Eigenbasis reference step value: {EIGEN_REF_STEP:.6g}")
         print("Source basis formulas:")
         for item in source_transform.basis_params:
             print(f"  {item.name} = {item.formula}")
@@ -879,7 +899,13 @@ def main():
         f"Grid: N_fft={n_full_fft} | N_band_used={f_series.size} | stride={stride} | "
         f"max_bins={base.MAX_FREQ_BINS}"
     )
-    print(f"REL_STEPS={base.REL_STEPS}")
+    if base.PARAM_STEPS:
+        print("Step mode: absolute")
+        print(f"FISHER_PARAM_STEPS={base.format_step_map(base.PARAM_STEPS, RAW_PARAMS)}")
+        print(f"FISHER_STEP_SCALES={base.STEP_SCALES}")
+    else:
+        print("Step mode: relative")
+        print(f"REL_STEPS={base.REL_STEPS}")
 
     if BASIS_MODE in ("log_all", "log_selected"):
         print(
@@ -895,7 +921,7 @@ def main():
 
     physical_records = []
     source_records = []
-    for rel_step in base.REL_STEPS:
+    for cfg in scan_configs:
         raw_result = fisher_matrix(
             adapter,
             params=RAW_PARAMS,
@@ -905,7 +931,8 @@ def main():
             f_series=f_series,
             noise=TianQinNoise(),
             use_T=base.USE_T,
-            rel_step=rel_step,
+            step=cfg["step"],
+            rel_step=cfg["rel_step"],
         )
         raw_result["frequency_size"] = len(f_series)
         physical_metrics = base.analyze_fisher_matrix(
@@ -919,7 +946,9 @@ def main():
         )
         physical_records.append(
             {
-                "rel_step": rel_step,
+                "step_mode": cfg["step_mode"],
+                "scan_value": cfg["scan_value"],
+                "step_map": cfg["step"],
                 "result": raw_result,
                 "metrics": physical_metrics,
             }
@@ -945,7 +974,9 @@ def main():
         )
         source_records.append(
             {
-                "rel_step": rel_step,
+                "step_mode": cfg["step_mode"],
+                "scan_value": cfg["scan_value"],
+                "step_map": cfg["step"],
                 "result": basis_result,
                 "metrics": basis_metrics,
             }
@@ -958,7 +989,7 @@ def main():
         reference_source = _select_reference_record(source_records, EIGEN_REF_STEP)
         transform, eigvals = build_eigenbasis_transform(source_transform, reference_source)
         print("\n=== Derived Eigenbasis ===")
-        print(f"Reference rel_step={reference_source['rel_step']:.1e} | source_mode={source_transform.mode}")
+        print(f"Reference step={base.step_label(reference_source)} | source_mode={source_transform.mode}")
         for item in transform.basis_params:
             print(f"  {item.name} = {item.formula}")
         eig_text = ", ".join(f"{item.name} var≈{val:.3e}" for item, val in zip(transform.basis_params, eigvals))
@@ -987,7 +1018,9 @@ def main():
             )
             basis_records.append(
                 {
-                    "rel_step": rec["rel_step"],
+                    "step_mode": rec["step_mode"],
+                    "scan_value": rec["scan_value"],
+                    "step_map": rec["step_map"],
                     "result": basis_result,
                     "metrics": basis_metrics,
                 }

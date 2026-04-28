@@ -5,7 +5,7 @@
   },
   "seed": 20260415,
   "catalog": {
-    "path": "tianqin_dc/sim_lisa_part01.txt",
+    "path": "tianqin_dc/codes/dwd_catalogs/sim_lisa_part01_row001.txt",
     "row_numbers": [1]
   },
   "observation": {

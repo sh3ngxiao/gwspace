@@ -25,13 +25,13 @@
     "include_confusion": false
   },
   "noise_output": {
-    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt15s/noise_aet.h5",
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt5s/noise_aet.h5",
     "overwrite": true,
     "compression": "gzip",
     "compression_level": 4
   },
   "output": {
-    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt15s/all_sources_merged_aet.h5",
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt5s/all_sources_merged_aet.h5",
     "overwrite": true,
     "compression": "gzip",
     "compression_level": 4

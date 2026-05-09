@@ -1,7 +1,7 @@
 {
   "dataset": {
-    "name": "minimal_smbhb_signal_all_phenomd_aet",
-    "description": "Signal-only SMBHB A/E/T response generated from the full MBHB catalog using GWspace bhb_PhenomD."
+    "name": "minimal_tianqin_tdi2_dt0p5s_smbhb_signal_all_ringdown_aet",
+    "description": "Signal-only SMBHB A/E/T response generated from the full MBHB catalog using GWspace ringdown / IMRPhenomXHM."
   },
   "seed": 20260509,
   "source": {
@@ -13,26 +13,28 @@
   },
   "observation": {
     "duration_s": 31536000.0,
-    "sample_rate_hz": 0.2,
-    "detector": "LISA",
+    "sample_rate_hz": 2.0,
+    "detector": "TQ",
     "tdi_generation": 2,
     "channels": ["A", "E", "T"],
     "use_gpu": false
   },
   "output": {
-    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt5s/smbhb_signal_all_phenomd_aet.h5",
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_tianqin_tdi2_dt0p5s/smbhb_signal_all_ringdown_aet.h5",
     "overwrite": true,
     "compression": "gzip",
     "compression_level": 4
   },
   "source_metadata_output": {
-    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt5s/smbhb_signal_all_phenomd_aet.sources.jsonl",
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_tianqin_tdi2_dt0p5s/smbhb_signal_all_ringdown_aet.sources.jsonl",
     "overwrite": true
   },
   "smbhb": {
     "seconds_per_year": 31558149.763545603,
     "fixed": {
-      "engine": "bhb_PhenomD"
+      "engine": "ringdown",
+      "modes": [[2, 2]],
+      "delta_t": 0.5
     }
   },
   "progress_interval": 1000

@@ -1,13 +1,13 @@
 {
   "dataset": {
-    "name": "minimal_sgwb_signal_all_aet",
+    "name": "minimal_taiji_tdi2_dt10s_sgwb_signal_all_aet",
     "description": "Signal-only isotropic SGWB A/E/T realization using a flat power-law energy-density spectrum."
   },
   "seed": 20260509,
   "observation": {
     "duration_s": 31536000.0,
     "sample_rate_hz": 0.2,
-    "detector": "LISA",
+    "detector": "Taiji",
     "tdi_generation": 2,
     "channels": ["A", "E", "T"],
     "use_gpu": false
@@ -19,7 +19,7 @@
     "beta": 0.0,
     "h0_km_s_mpc": 67.7,
     "f_min_hz": 1.0e-4,
-    "f_max_hz": 0.03333333333333333,
+    "f_max_hz": 0.05,
     "channel_response": {
       "A": 1.0,
       "E": 1.0,
@@ -27,7 +27,7 @@
     }
   },
   "output": {
-    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt5s/sgwb_signal_all_aet.h5",
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_taiji_tdi2_dt5s/sgwb_signal_all_aet.h5",
     "overwrite": true,
     "compression": "gzip",
     "compression_level": 4

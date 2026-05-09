@@ -1,6 +1,6 @@
 {
   "dataset": {
-    "name": "minimal_dwd_signal_all_aet",
+    "name": "minimal_taiji_tdi2_dt10s_dwd_signal_all_aet",
     "description": "Signal-only DWD A/E/T response generated from the full DWD catalog."
   },
   "seed": 20260509,
@@ -14,19 +14,19 @@
   "observation": {
     "duration_s": 31536000.0,
     "sample_rate_hz": 0.2,
-    "detector": "LISA",
+    "detector": "Taiji",
     "tdi_generation": 2,
     "channels": ["A", "E", "T"],
     "use_gpu": false
   },
   "output": {
-    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt5s/dwd_signal_all_aet.h5",
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_taiji_tdi2_dt5s/dwd_signal_all_aet.h5",
     "overwrite": true,
     "compression": "gzip",
     "compression_level": 4
   },
   "source_metadata_output": {
-    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt5s/dwd_signal_all_aet.sources.jsonl",
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_taiji_tdi2_dt5s/dwd_signal_all_aet.sources.jsonl",
     "overwrite": true
   },
   "progress_interval": 10000

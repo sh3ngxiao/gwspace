@@ -5,10 +5,10 @@
   },
   "seed": 20260509,
   "signal_inputs": [
-    "outputs/minimal_aet_lisa_tdi2_dt15s/dwd_signal_all_aet.h5",
-    "outputs/minimal_aet_lisa_tdi2_dt15s/smbhb_signal_all_aet.h5",
-    "outputs/minimal_aet_lisa_tdi2_dt15s/sbbh_signal_all_aet.h5",
-    "outputs/minimal_aet_lisa_tdi2_dt15s/emri_signal_all_aet.h5"
+    "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt15s/dwd_signal_all_aet.h5",
+    "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt15s/smbhb_signal_all_aet.h5",
+    "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt15s/sbbh_signal_all_aet.h5",
+    "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt15s/emri_signal_all_aet.h5"
   ],
   "observation": {
     "duration_s": 31536000.0,
@@ -25,13 +25,13 @@
     "include_confusion": false
   },
   "noise_output": {
-    "path": "outputs/minimal_aet_lisa_tdi2_dt15s/noise_aet.h5",
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt15s/noise_aet.h5",
     "overwrite": true,
     "compression": "gzip",
     "compression_level": 4
   },
   "output": {
-    "path": "outputs/minimal_aet_lisa_tdi2_dt15s/all_sources_merged_aet.h5",
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt15s/all_sources_merged_aet.h5",
     "overwrite": true,
     "compression": "gzip",
     "compression_level": 4

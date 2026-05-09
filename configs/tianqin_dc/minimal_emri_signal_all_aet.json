@@ -20,13 +20,13 @@
     "use_gpu": false
   },
   "output": {
-    "path": "outputs/minimal_aet_lisa_tdi2_dt15s/emri_signal_all_aet.h5",
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt15s/emri_signal_all_aet.h5",
     "overwrite": true,
     "compression": "gzip",
     "compression_level": 4
   },
   "source_metadata_output": {
-    "path": "outputs/minimal_aet_lisa_tdi2_dt15s/emri_signal_all_aet.sources.jsonl",
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt15s/emri_signal_all_aet.sources.jsonl",
     "overwrite": true
   },
   "emri": {

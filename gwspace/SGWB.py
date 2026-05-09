@@ -116,7 +116,11 @@ class SGWB(object):
         l2, m2 = v_idx_2_alm(self.blmax, kk)
         L, M = v_idx_2_alm(self.almax, ii)
 
-        cg = np.vectorize(lambda l_1, m_1, l_2, m_2, L_, M_: float(clebsch_gordan(l_1, l_2, L_, m_1, m_2, M_)))
+        cg = np.vectorize(
+            lambda l_1, m_1, l_2, m_2, L_, M_: float(
+                clebsch_gordan(int(l_1), int(l_2), int(L_), int(m_1), int(m_2), int(M_))
+            )
+        )
         beta_vals = (np.sqrt((2*l1+1)*(2*l2+1)/(4*PI*(2*L+1))) *
                      cg(l1, 0, l2, 0, L, 0)*cg(l1, m1, l2, m2, L, M))
         return beta_vals

@@ -9,7 +9,7 @@ from gwspace.Waveform import waveforms
 
 from tianqin_dc.config import ObservationConfig
 from tianqin_dc.models import SourceGenerationResult
-from tianqin_dc.response import generate_tdi_channels_fd
+from tianqin_dc.response import generate_tdi_channels_fd, generate_tdi_channels_td
 from tianqin_dc.sources.base import SourceFactory
 
 
@@ -26,6 +26,16 @@ def _ensure_local_pyeccentricfd_path() -> None:
         if candidate_str not in sys.path:
             sys.path.insert(0, candidate_str)
         return
+
+
+def _ensure_lalsimulation_available() -> None:
+    try:
+        import lal  # noqa: F401
+        import lalsimulation  # noqa: F401
+    except ModuleNotFoundError as exc:
+        raise ImportError(
+            "GWspace ringdown / IMRPhenomXHM requires the 'lal' and 'lalsimulation' Python packages."
+        ) from exc
 
 
 class GWspaceCompactBinaryFactory(SourceFactory):
@@ -58,20 +68,32 @@ class GWspaceCompactBinaryFactory(SourceFactory):
         prepared.setdefault("tc", 0.0)
         prepared.setdefault("eccentricity", 0.0)
         prepared.setdefault("engine", "auto")
+        if self._normalize_engine_name(str(prepared["engine"])) == "ringdown":
+            prepared.setdefault("modes", [(2, 2)])
+            prepared.setdefault("delta_t", observation.sample_spacing_s)
         return prepared
+
+    def _normalize_engine_name(self, engine_request: str) -> str:
+        aliases = {
+            "bhb_phenomd": "bhb_PhenomD",
+            "phenomd": "bhb_PhenomD",
+            "imrphenomd": "bhb_PhenomD",
+            "bhb_eccfd": "bhb_EccFD",
+            "eccfd": "bhb_EccFD",
+            "eccentricfd": "bhb_EccFD",
+            "bhb_ringdown": "ringdown",
+            "ringdown": "ringdown",
+            "imrphenomxhm": "ringdown",
+            "phenomxhm": "ringdown",
+        }
+        return aliases.get(engine_request.strip().lower(), engine_request.strip())
 
     def _resolve_engine_candidates(self, engine_request: str) -> tuple[str, ...]:
         normalized = engine_request.strip()
         if normalized in ("auto", ""):
             return ("bhb_PhenomD", "bhb_EccFD")
-        aliases = {
-            "bhb_phenomd": "bhb_PhenomD",
-            "phenomd": "bhb_PhenomD",
-            "bhb_eccfd": "bhb_EccFD",
-            "eccfd": "bhb_EccFD",
-        }
-        engine = aliases.get(normalized.lower(), normalized)
-        if engine not in ("bhb_PhenomD", "bhb_EccFD"):
+        engine = self._normalize_engine_name(normalized)
+        if engine not in ("bhb_PhenomD", "bhb_EccFD", "ringdown"):
             raise ValueError(f"Unsupported compact-binary engine request '{engine_request}'.")
         return (engine,)
 
@@ -82,7 +104,21 @@ class GWspaceCompactBinaryFactory(SourceFactory):
             wave_parameters.pop("eccentricity", None)
         elif engine == "bhb_EccFD":
             _ensure_local_pyeccentricfd_path()
+        elif engine == "ringdown":
+            _ensure_lalsimulation_available()
+            wave_parameters.pop("eccentricity", None)
+            wave_parameters.setdefault("modes", [(2, 2)])
         return waveforms[engine](**wave_parameters)
+
+    def _generate_channels_for_engine(
+        self,
+        engine: str,
+        waveform: Any,
+        observation: ObservationConfig,
+    ) -> tuple[dict[str, Any], str]:
+        if engine == "ringdown":
+            return generate_tdi_channels_td(waveform, observation.time_array(), observation), "time"
+        return generate_tdi_channels_fd(waveform, observation), "frequency"
 
     def _engine_specific_notes(self, engine: str, requested_kind: str) -> list[str]:
         notes: list[str] = []
@@ -94,6 +130,9 @@ class GWspaceCompactBinaryFactory(SourceFactory):
                 )
         elif engine == "bhb_PhenomD":
             notes.append("Resolved compact-binary engine: GWspace bhb_PhenomD.")
+        elif engine == "ringdown":
+            notes.append("Resolved compact-binary engine: GWspace ringdown / IMRPhenomXHM.")
+            notes.append("Ringdown uses the time-domain response path and requires lal/lalsimulation.")
         return notes
 
     def generate(self, parameters: dict[str, Any], observation: ObservationConfig) -> SourceGenerationResult:
@@ -104,10 +143,11 @@ class GWspaceCompactBinaryFactory(SourceFactory):
         for engine in self._resolve_engine_candidates(engine_request):
             try:
                 waveform = self._build_waveform(engine, prepared)
-                channels = generate_tdi_channels_fd(waveform, observation)
+                channels, response_domain = self._generate_channels_for_engine(engine, waveform, observation)
                 metadata = {
                     "engine_request": engine_request,
                     "engine_resolved": engine,
+                    "response_domain": response_domain,
                 }
                 return self.make_result(
                     channels,
@@ -115,6 +155,7 @@ class GWspaceCompactBinaryFactory(SourceFactory):
                     engine=f"gwspace:{engine}",
                     notes=self._engine_specific_notes(engine, self.kind),
                     metadata=metadata,
+                    domain=response_domain,
                 )
             except (ImportError, ModuleNotFoundError, AttributeError, NameError, OSError, RuntimeError, TypeError, ValueError) as exc:
                 last_error = exc
@@ -139,4 +180,11 @@ class SMBHBSourceFactory(GWspaceCompactBinaryFactory):
     notes = GWspaceCompactBinaryFactory.notes + (
         "SMBHB is currently represented with the same GWspace compact-binary engine family as SBBH, using different population priors and labels.",
         "If PyIMRPhenomD becomes available later, you can request engine='bhb_PhenomD' in the source config.",
+        "You can request engine='ringdown' to use GWspace RingdownWaveform / IMRPhenomXHM through the time-domain response path.",
     )
+
+    def _resolve_engine_candidates(self, engine_request: str) -> tuple[str, ...]:
+        normalized = engine_request.strip()
+        if normalized in ("auto", ""):
+            return ("bhb_PhenomD", "bhb_EccFD", "ringdown")
+        return super()._resolve_engine_candidates(engine_request)

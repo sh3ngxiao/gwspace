@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH -J tq_min_emri
 #SBATCH -p cpu_part
-#SBATCH -w comput11
+#SBATCH -w comput6
 #SBATCH -N 1
 #SBATCH -n 1
-#SBATCH --cpus-per-task=4
-#SBATCH --mem=128G
+#SBATCH --cpus-per-task=50
+#SBATCH --mem=256G
 #SBATCH --time=72:00:00
 #SBATCH -o /public/home/zhuangzhenye/jobs/gwspace_runs/logs/%x-%j.out
 #SBATCH -e /public/home/zhuangzhenye/jobs/gwspace_runs/logs/%x-%j.err

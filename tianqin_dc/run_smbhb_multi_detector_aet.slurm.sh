@@ -24,6 +24,14 @@ PYTHON_BIN="${PYTHON_BIN:-/public/home/zhuangzhenye/.conda/envs/gwspace312/bin/p
 mkdir -p "$LOG_DIR" "$OUT_DIR" "$OUTPUT_DIR"
 cd "$PROJECT_ROOT"
 
+if type module >/dev/null 2>&1; then
+  module load apps/anaconda202309 || echo "[WARN] Failed to load module apps/anaconda202309"
+  module load gsl2.7.1 || module load gsl || echo "[WARN] Failed to load a GSL module"
+fi
+if [[ -n "${GSL_LIB_DIR:-}" ]]; then
+  export LD_LIBRARY_PATH="$GSL_LIB_DIR:${LD_LIBRARY_PATH:-}"
+fi
+
 export PYTHONPATH="$PROJECT_ROOT"
 export PYTHONUNBUFFERED=1
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
@@ -38,6 +46,7 @@ echo "PROJECT_ROOT: $PROJECT_ROOT"
 echo "Python: $PYTHON_BIN"
 echo "Config: $CONFIG"
 echo "Output dir: $OUTPUT_DIR"
+echo "LD_LIBRARY_PATH: ${LD_LIBRARY_PATH:-}"
 
 CMD=("$PYTHON_BIN" -u -m tianqin_dc.multi_detector_aet --config "$CONFIG" --output-dir "$OUTPUT_DIR")
 if [[ -n "${PREFIX:-}" ]]; then

@@ -1,0 +1,50 @@
+{
+  "dataset": {
+    "name": "minimal_emri_signal_all_aet",
+    "description": "Signal-only EMRI A/E/T response generated from all EMRI_source catalogs."
+  },
+  "seed": 20260509,
+  "source": {
+    "kind": "emri"
+  },
+  "catalog": {
+    "path_glob": "tianqin_dc/EMRI_source/*.OUT",
+    "select_all": true
+  },
+  "observation": {
+    "duration_s": 31536000.0,
+    "sample_rate_hz": 0.2,
+    "detector": "TQ",
+    "tdi_generation": 1,
+    "channels": ["A", "E", "T"],
+    "use_gpu": false
+  },
+  "output": {
+    "path": "outputs/minimal_aet/emri_signal_all_aet.h5",
+    "overwrite": true,
+    "compression": "gzip",
+    "compression_level": 4
+  },
+  "source_metadata_output": {
+    "path": "outputs/minimal_aet/emri_signal_all_aet.sources.jsonl",
+    "overwrite": true
+  },
+  "emri": {
+    "use_catalog_inclination_for_x0": true,
+    "fixed": {
+      "p0": 12.0,
+      "backend": "cpu"
+    },
+    "sampler": {
+      "e0": { "distribution": "uniform", "low": 0.0, "high": 0.2 },
+      "qS": { "distribution": "isotropic_polar" },
+      "phiS": { "distribution": "uniform", "low": 0.0, "high": 6.283185307179586 },
+      "qK": { "distribution": "isotropic_polar" },
+      "phiK": { "distribution": "uniform", "low": 0.0, "high": 6.283185307179586 },
+      "Phi_phi0": { "distribution": "uniform", "low": 0.0, "high": 6.283185307179586 },
+      "Phi_theta0": { "distribution": "uniform", "low": 0.0, "high": 6.283185307179586 },
+      "Phi_r0": { "distribution": "uniform", "low": 0.0, "high": 6.283185307179586 }
+    }
+  },
+  "progress_interval": 1000
+}

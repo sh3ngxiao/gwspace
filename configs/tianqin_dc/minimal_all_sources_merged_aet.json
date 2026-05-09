@@ -1,0 +1,39 @@
+{
+  "dataset": {
+    "name": "minimal_all_sources_merged_aet",
+    "description": "Merged DWD + SMBHB + SBBH + EMRI A/E/T response with one shared noise realization."
+  },
+  "seed": 20260509,
+  "signal_inputs": [
+    "outputs/minimal_aet/dwd_signal_all_aet.h5",
+    "outputs/minimal_aet/smbhb_signal_all_aet.h5",
+    "outputs/minimal_aet/sbbh_signal_all_aet.h5",
+    "outputs/minimal_aet/emri_signal_all_aet.h5"
+  ],
+  "observation": {
+    "duration_s": 31536000.0,
+    "sample_rate_hz": 0.2,
+    "detector": "TQ",
+    "tdi_generation": 1,
+    "channels": ["A", "E", "T"],
+    "use_gpu": false
+  },
+  "noise": {
+    "enabled": true,
+    "model": "TQ",
+    "unit": "relative_frequency",
+    "include_confusion": false
+  },
+  "noise_output": {
+    "path": "outputs/minimal_aet/noise_aet.h5",
+    "overwrite": true,
+    "compression": "gzip",
+    "compression_level": 4
+  },
+  "output": {
+    "path": "outputs/minimal_aet/all_sources_merged_aet.h5",
+    "overwrite": true,
+    "compression": "gzip",
+    "compression_level": 4
+  }
+}

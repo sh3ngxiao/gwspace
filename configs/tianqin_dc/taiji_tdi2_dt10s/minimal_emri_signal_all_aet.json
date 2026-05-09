@@ -1,6 +1,6 @@
 {
   "dataset": {
-    "name": "minimal_emri_signal_all_aet",
+    "name": "minimal_taiji_tdi2_dt10s_emri_signal_all_aet",
     "description": "Signal-only EMRI A/E/T response generated from all EMRI_source catalogs."
   },
   "seed": 20260509,
@@ -14,19 +14,19 @@
   "observation": {
     "duration_s": 31536000.0,
     "sample_rate_hz": 0.2,
-    "detector": "LISA",
+    "detector": "Taiji",
     "tdi_generation": 2,
     "channels": ["A", "E", "T"],
     "use_gpu": false
   },
   "output": {
-    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt5s/emri_signal_all_aet.h5",
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_taiji_tdi2_dt5s/emri_signal_all_aet.h5",
     "overwrite": true,
     "compression": "gzip",
     "compression_level": 4
   },
   "source_metadata_output": {
-    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt5s/emri_signal_all_aet.sources.jsonl",
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_taiji_tdi2_dt5s/emri_signal_all_aet.sources.jsonl",
     "overwrite": true
   },
   "emri": {

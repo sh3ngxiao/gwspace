@@ -13,7 +13,7 @@
   ],
   "observation": {
     "duration_s": 31536000.0,
-    "sample_rate_hz": 0.06666666666666667,
+    "sample_rate_hz": 0.2,
     "detector": "LISA",
     "tdi_generation": 2,
     "channels": ["A", "E", "T"],
@@ -26,13 +26,13 @@
     "include_confusion": false
   },
   "noise_output": {
-    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt15s/noise_plus_sgwb_aet.h5",
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt5s/noise_plus_sgwb_aet.h5",
     "overwrite": true,
     "compression": "gzip",
     "compression_level": 4
   },
   "output": {
-    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt15s/all_sources_plus_sgwb_merged_aet.h5",
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt5s/all_sources_plus_sgwb_merged_aet.h5",
     "overwrite": true,
     "compression": "gzip",
     "compression_level": 4

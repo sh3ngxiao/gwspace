@@ -13,20 +13,20 @@
   },
   "observation": {
     "duration_s": 31536000.0,
-    "sample_rate_hz": 0.06666666666666667,
+    "sample_rate_hz": 0.2,
     "detector": "LISA",
     "tdi_generation": 2,
     "channels": ["A", "E", "T"],
     "use_gpu": false
   },
   "output": {
-    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt15s/smbhb_signal_all_ringdown_aet.h5",
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt5s/smbhb_signal_all_ringdown_aet.h5",
     "overwrite": true,
     "compression": "gzip",
     "compression_level": 4
   },
   "source_metadata_output": {
-    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt15s/smbhb_signal_all_ringdown_aet.sources.jsonl",
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt5s/smbhb_signal_all_ringdown_aet.sources.jsonl",
     "overwrite": true
   },
   "smbhb": {
@@ -34,7 +34,7 @@
     "fixed": {
       "engine": "ringdown",
       "modes": [[2, 2]],
-      "delta_t": 15.0
+      "delta_t": 5.0
     }
   },
   "progress_interval": 1000

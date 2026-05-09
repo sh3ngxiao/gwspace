@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH -J tq_min_smbhb_rd
-#SBATCH -p cpu_part
-#SBATCH -w comput6
+#SBATCH -J tj_min_emri
+#SBATCH -p gpu_part
+# #SBATCH -w comput6
 #SBATCH -N 1
 #SBATCH -n 1
 #SBATCH --cpus-per-task=50
@@ -13,7 +13,7 @@
 set -eo pipefail
 
 PROJECT_ROOT="${PROJECT_ROOT:-/public/home/zhuangzhenye/jobs/GWSpace}"
-CONFIG="${CONFIG:-$PROJECT_ROOT/configs/tianqin_dc/minimal_smbhb_signal_all_ringdown_aet.json}"
+CONFIG="${CONFIG:-$PROJECT_ROOT/configs/tianqin_dc/taiji_tdi2_dt10s/minimal_emri_signal_all_aet.json}"
 RUN_ROOT="${RUN_ROOT:-/public/home/zhuangzhenye/jobs/gwspace_runs}"
 LOG_DIR="$RUN_ROOT/logs"
 PYTHON_BIN="${PYTHON_BIN:-/public/home/zhuangzhenye/.conda/envs/gwspace312/bin/python}"

@@ -1,0 +1,35 @@
+{
+  "dataset": {
+    "name": "minimal_sgwb_signal_all_aet",
+    "description": "Signal-only isotropic SGWB A/E/T realization using a flat power-law energy-density spectrum."
+  },
+  "seed": 20260509,
+  "observation": {
+    "duration_s": 31536000.0,
+    "sample_rate_hz": 0.06666666666666667,
+    "detector": "LISA",
+    "tdi_generation": 2,
+    "channels": ["A", "E", "T"],
+    "use_gpu": false
+  },
+  "sgwb": {
+    "model": "power_law",
+    "omega_ref": 6.0e-12,
+    "f_ref_hz": 1.0e-3,
+    "beta": 0.0,
+    "h0_km_s_mpc": 67.7,
+    "f_min_hz": 1.0e-4,
+    "f_max_hz": 0.03333333333333333,
+    "channel_response": {
+      "A": 1.0,
+      "E": 1.0,
+      "T": 0.0
+    }
+  },
+  "output": {
+    "path": "outputs/minimal_aet_lisa_tdi2_dt15s/sgwb_signal_all_aet.h5",
+    "overwrite": true,
+    "compression": "gzip",
+    "compression_level": 4
+  }
+}

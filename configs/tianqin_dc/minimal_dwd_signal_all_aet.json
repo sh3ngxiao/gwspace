@@ -13,20 +13,20 @@
   },
   "observation": {
     "duration_s": 31536000.0,
-    "sample_rate_hz": 0.2,
-    "detector": "TQ",
-    "tdi_generation": 1,
+    "sample_rate_hz": 0.06666666666666667,
+    "detector": "LISA",
+    "tdi_generation": 2,
     "channels": ["A", "E", "T"],
     "use_gpu": false
   },
   "output": {
-    "path": "outputs/minimal_aet/dwd_signal_all_aet.h5",
+    "path": "outputs/minimal_aet_lisa_tdi2_dt15s/dwd_signal_all_aet.h5",
     "overwrite": true,
     "compression": "gzip",
     "compression_level": 4
   },
   "source_metadata_output": {
-    "path": "outputs/minimal_aet/dwd_signal_all_aet.sources.jsonl",
+    "path": "outputs/minimal_aet_lisa_tdi2_dt15s/dwd_signal_all_aet.sources.jsonl",
     "overwrite": true
   },
   "progress_interval": 10000

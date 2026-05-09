@@ -1,7 +1,7 @@
 {
   "dataset": {
-    "name": "minimal_smbhb_signal_all_aet",
-    "description": "Signal-only SMBHB A/E/T response generated from the full MBHB catalog."
+    "name": "minimal_smbhb_signal_all_phenomd_aet",
+    "description": "Signal-only SMBHB A/E/T response generated from the full MBHB catalog using GWspace bhb_PhenomD."
   },
   "seed": 20260509,
   "source": {
@@ -20,17 +20,20 @@
     "use_gpu": false
   },
   "output": {
-    "path": "outputs/minimal_aet_lisa_tdi2_dt15s/smbhb_signal_all_aet.h5",
+    "path": "outputs/minimal_aet_lisa_tdi2_dt15s/smbhb_signal_all_phenomd_aet.h5",
     "overwrite": true,
     "compression": "gzip",
     "compression_level": 4
   },
   "source_metadata_output": {
-    "path": "outputs/minimal_aet_lisa_tdi2_dt15s/smbhb_signal_all_aet.sources.jsonl",
+    "path": "outputs/minimal_aet_lisa_tdi2_dt15s/smbhb_signal_all_phenomd_aet.sources.jsonl",
     "overwrite": true
   },
   "smbhb": {
-    "seconds_per_year": 31558149.763545603
+    "seconds_per_year": 31558149.763545603,
+    "fixed": {
+      "engine": "bhb_PhenomD"
+    }
   },
   "progress_interval": 1000
 }

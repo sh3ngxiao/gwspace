@@ -14,7 +14,7 @@ from gwspace.constants import YRSID_SI
 
 from tianqin_dc.config import DatasetConfig, ObservationConfig, SamplerConfig
 from tianqin_dc.mbhb_catalog import MBHBCatalogEntry, iter_mbhb_catalog
-from tianqin_dc.response import generate_tdi_xyz_fd
+from tianqin_dc.response import generate_tdi_xyz_fd, generate_tdi_xyz_td
 from tianqin_dc.sampling import sample_value
 from tianqin_dc.sources.compact_binary import SMBHBSourceFactory
 
@@ -319,7 +319,10 @@ def _build_smbhb_waveform_and_channels(
     for engine in factory._resolve_engine_candidates(engine_request):
         try:
             waveform = factory._build_waveform(engine, prepared_parameters)
-            channels = generate_tdi_xyz_fd(waveform, observation)
+            if engine == "ringdown":
+                channels = generate_tdi_xyz_td(waveform, observation.time_array(), observation)
+            else:
+                channels = generate_tdi_xyz_fd(waveform, observation)
             return channels, engine
         except _FALLBACK_ENGINE_EXCEPTIONS as exc:
             last_error = exc

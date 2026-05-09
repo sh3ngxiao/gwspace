@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -J tq_min_sgwb
-#SBATCH -p cpu_part
+#SBATCH -p gpu_part
 #SBATCH -w GPU06
 #SBATCH -N 1
 #SBATCH -n 1

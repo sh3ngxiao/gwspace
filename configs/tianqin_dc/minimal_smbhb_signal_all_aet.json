@@ -1,0 +1,36 @@
+{
+  "dataset": {
+    "name": "minimal_smbhb_signal_all_aet",
+    "description": "Signal-only SMBHB A/E/T response generated from the full MBHB catalog."
+  },
+  "seed": 20260509,
+  "source": {
+    "kind": "smbhb"
+  },
+  "catalog": {
+    "path": "tianqin_dc/codes/mbhb_catalogs/tianqin_mbhb_catalog_v1.csv",
+    "select_all": true
+  },
+  "observation": {
+    "duration_s": 31536000.0,
+    "sample_rate_hz": 0.2,
+    "detector": "TQ",
+    "tdi_generation": 1,
+    "channels": ["A", "E", "T"],
+    "use_gpu": false
+  },
+  "output": {
+    "path": "outputs/minimal_aet/smbhb_signal_all_aet.h5",
+    "overwrite": true,
+    "compression": "gzip",
+    "compression_level": 4
+  },
+  "source_metadata_output": {
+    "path": "outputs/minimal_aet/smbhb_signal_all_aet.sources.jsonl",
+    "overwrite": true
+  },
+  "smbhb": {
+    "seconds_per_year": 31558149.763545603
+  },
+  "progress_interval": 1000
+}

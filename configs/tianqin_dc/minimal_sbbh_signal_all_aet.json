@@ -1,0 +1,47 @@
+{
+  "dataset": {
+    "name": "minimal_sbbh_signal_all_aet",
+    "description": "Signal-only stellar-mass BBH A/E/T response generated from the full BP2P BBH catalog."
+  },
+  "seed": 20260509,
+  "source": {
+    "kind": "sbbh"
+  },
+  "catalog": {
+    "path": "tianqin_dc/codes/bp2p_bbh_catalogs/catalog_001.csv",
+    "select_all": true
+  },
+  "observation": {
+    "duration_s": 31536000.0,
+    "sample_rate_hz": 0.2,
+    "detector": "TQ",
+    "tdi_generation": 1,
+    "channels": ["A", "E", "T"],
+    "use_gpu": false
+  },
+  "output": {
+    "path": "outputs/minimal_aet/sbbh_signal_all_aet.h5",
+    "overwrite": true,
+    "compression": "gzip",
+    "compression_level": 4
+  },
+  "source_metadata_output": {
+    "path": "outputs/minimal_aet/sbbh_signal_all_aet.sources.jsonl",
+    "overwrite": true
+  },
+  "bbh": {
+    "fixed": {
+      "engine": "bhb_EccFD",
+      "eccentricity": 0.0
+    },
+    "sampler": {
+      "Lambda": { "distribution": "uniform", "low": 0.0, "high": 6.283185307179586 },
+      "Beta": { "distribution": "isotropic_latitude" },
+      "iota": { "distribution": "isotropic_polar" },
+      "var_phi": { "distribution": "uniform", "low": 0.0, "high": 6.283185307179586 },
+      "phi_c": { "distribution": "uniform", "low": 0.0, "high": 6.283185307179586 }
+    },
+    "use_catalog_psi_for_polarization": true
+  },
+  "progress_interval": 1000
+}

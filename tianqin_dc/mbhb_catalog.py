@@ -68,7 +68,7 @@ class MBHBCatalogEntry:
         }
 
     def to_waveform_parameters(self, *, seconds_per_year: float) -> dict[str, Any]:
-        return {
+        parameters: dict[str, Any] = {
             "mass1": self.m1_msun,
             "mass2": self.m2_msun,
             "DL": self.luminosity_distance_mpc,
@@ -82,6 +82,9 @@ class MBHBCatalogEntry:
             "eccentricity": self.eccentricity,
             "engine": self.engine,
         }
+        if self.metadata.get("f_gw_start_hz") not in (None, ""):
+            parameters["response_f_min_hz"] = float(self.metadata["f_gw_start_hz"])
+        return parameters
 
 
 def _float_field(path: Path, row_number: int, row: dict[str, str], field: str) -> float:

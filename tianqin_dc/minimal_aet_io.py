@@ -70,6 +70,12 @@ def save_minimal_aet_hdf5(
             raise ValueError(f"Column '{name}' has shape {values.shape}, expected {(n_rows,)}.")
 
     chunk_rows = max(1, min(int(output.chunk_rows), n_rows))
+    total_chunks = (n_rows + chunk_rows - 1) // chunk_rows
+    progress_every = max(1, total_chunks // 10)
+    print(
+        f"Writing HDF5 dataset {output_path} with {n_rows} rows in {total_chunks} chunks.",
+        flush=True,
+    )
     with h5py.File(output_path, "w") as handle:
         dataset = handle.create_dataset(
             "data",
@@ -88,6 +94,9 @@ def save_minimal_aet_hdf5(
             buffer_view["e"] = arrays["e"][start:stop]
             buffer_view["t"] = arrays["t"][start:stop]
             dataset[start:stop] = buffer_view
+            chunk_index = start // chunk_rows + 1
+            if chunk_index == total_chunks or chunk_index % progress_every == 0:
+                print(f"Wrote HDF5 chunk {chunk_index}/{total_chunks}.", flush=True)
 
     return output_path
 

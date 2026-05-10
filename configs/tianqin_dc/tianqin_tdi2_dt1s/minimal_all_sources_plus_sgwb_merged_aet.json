@@ -1,0 +1,40 @@
+{
+  "dataset": {
+    "name": "minimal_tianqin_tdi2_dt1s_all_sources_plus_sgwb_merged_aet",
+    "description": "Merged DWD + SMBHB + SBBH + EMRI + SGWB A/E/T response with one shared noise realization."
+  },
+  "seed": 20260509,
+  "signal_inputs": [
+    "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_tianqin_tdi2_dt1s/dwd_signal_all_aet.h5",
+    "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_tianqin_tdi2_dt1s/smbhb_signal_all_aet.h5",
+    "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_tianqin_tdi2_dt1s/sbbh_signal_all_aet.h5",
+    "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_tianqin_tdi2_dt1s/emri_signal_all_aet.h5",
+    "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_tianqin_tdi2_dt1s/sgwb_signal_all_aet.h5"
+  ],
+  "observation": {
+    "duration_s": 31536000.0,
+    "sample_rate_hz": 1.0,
+    "detector": "TQ",
+    "tdi_generation": 2,
+    "channels": ["A", "E", "T"],
+    "use_gpu": false
+  },
+  "noise": {
+    "enabled": true,
+    "model": "TQ",
+    "unit": "relative_frequency",
+    "include_confusion": false
+  },
+  "noise_output": {
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_tianqin_tdi2_dt1s/noise_plus_sgwb_aet.h5",
+    "overwrite": true,
+    "compression": "gzip",
+    "compression_level": 4
+  },
+  "output": {
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_tianqin_tdi2_dt1s/all_sources_plus_sgwb_merged_aet.h5",
+    "overwrite": true,
+    "compression": "gzip",
+    "compression_level": 4
+  }
+}

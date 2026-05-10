@@ -1,7 +1,7 @@
 {
   "dataset": {
-    "name": "minimal_tianqin_tdi2_dt0p5s_smbhb_signal_all_aet",
-    "description": "Signal-only SMBHB A/E/T response generated from the full MBHB catalog."
+    "name": "minimal_tianqin_tdi2_dt1s_smbhb_signal_all_eccfd_aet",
+    "description": "Signal-only SMBHB A/E/T response generated from the full MBHB catalog using GWspace bhb_EccFD."
   },
   "seed": 20260509,
   "source": {
@@ -13,24 +13,27 @@
   },
   "observation": {
     "duration_s": 31536000.0,
-    "sample_rate_hz": 2.0,
+    "sample_rate_hz": 1.0,
     "detector": "TQ",
     "tdi_generation": 2,
     "channels": ["A", "E", "T"],
     "use_gpu": false
   },
   "output": {
-    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_tianqin_tdi2_dt0p5s/smbhb_signal_all_aet.h5",
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_tianqin_tdi2_dt1s/smbhb_signal_all_eccfd_aet.h5",
     "overwrite": true,
     "compression": "gzip",
     "compression_level": 4
   },
   "source_metadata_output": {
-    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_tianqin_tdi2_dt0p5s/smbhb_signal_all_aet.sources.jsonl",
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_tianqin_tdi2_dt1s/smbhb_signal_all_eccfd_aet.sources.jsonl",
     "overwrite": true
   },
   "smbhb": {
-    "seconds_per_year": 31558149.763545603
+    "seconds_per_year": 31558149.763545603,
+    "fixed": {
+      "engine": "bhb_EccFD"
+    }
   },
   "progress_interval": 1000
 }

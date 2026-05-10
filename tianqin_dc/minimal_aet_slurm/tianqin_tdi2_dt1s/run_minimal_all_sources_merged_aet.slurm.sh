@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J tq2_min_dwd
+#SBATCH -J tq2_1s_merge
 #SBATCH -p gpu_part
 #SBATCH -N 1
 #SBATCH -n 1
@@ -12,14 +12,10 @@
 set -eo pipefail
 
 PROJECT_ROOT="${PROJECT_ROOT:-/public/home/zhuangzhenye/jobs/GWSpace}"
-CONFIG="${CONFIG:-$PROJECT_ROOT/configs/tianqin_dc/tianqin_tdi2_dt0p5s/minimal_dwd_signal_all_aet.json}"
+CONFIG="${CONFIG:-$PROJECT_ROOT/configs/tianqin_dc/tianqin_tdi2_dt1s/minimal_all_sources_merged_aet.json}"
 RUN_ROOT="${RUN_ROOT:-/public/home/zhuangzhenye/jobs/gwspace_runs}"
 LOG_DIR="$RUN_ROOT/logs"
 PYTHON_BIN="${PYTHON_BIN:-/public/home/zhuangzhenye/.conda/envs/gwspace312/bin/python}"
-TQ_NUMERICAL_ORBIT_PATH="${TQ_NUMERICAL_ORBIT_PATH:-/public/home/zhuangzhenye/jobs/tianqin_orbit/satellite_positions_ssb_tq_1s_from_oem.npy}"
-TQ_NUMERICAL_ORBIT_OUT_OF_RANGE="${TQ_NUMERICAL_ORBIT_OUT_OF_RANGE:-raise}"
-WORKERS="${WORKERS:-${SLURM_CPUS_PER_TASK:-1}}"
-THREADS_PER_WORKER="${THREADS_PER_WORKER:-1}"
 
 mkdir -p "$LOG_DIR"
 cd "$PROJECT_ROOT"
@@ -34,12 +30,10 @@ fi
 
 export PYTHONPATH="$PROJECT_ROOT"
 export PYTHONUNBUFFERED=1
-export OMP_NUM_THREADS="$THREADS_PER_WORKER"
-export OPENBLAS_NUM_THREADS="$THREADS_PER_WORKER"
-export MKL_NUM_THREADS="$THREADS_PER_WORKER"
-export NUMEXPR_NUM_THREADS="$THREADS_PER_WORKER"
-export TQ_NUMERICAL_ORBIT_PATH
-export TQ_NUMERICAL_ORBIT_OUT_OF_RANGE
+export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
+export OPENBLAS_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
+export MKL_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
+export NUMEXPR_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 
 echo "Start time: $(date)"
 echo "Host: $(hostname)"
@@ -47,27 +41,27 @@ echo "PWD: $(pwd)"
 echo "PROJECT_ROOT: $PROJECT_ROOT"
 echo "Python: $PYTHON_BIN"
 echo "Config: $CONFIG"
-echo "TQ numerical orbit: $TQ_NUMERICAL_ORBIT_PATH"
-echo "TQ numerical orbit out-of-range: $TQ_NUMERICAL_ORBIT_OUT_OF_RANGE"
-echo "Workers: $WORKERS"
-echo "Threads per worker: $THREADS_PER_WORKER"
 echo "Output override: ${OUTPUT:-<config output.path>}"
-echo "Source metadata override: ${SOURCE_METADATA_OUTPUT:-<config source_metadata_output.path>}"
+echo "Noise output override: ${NOISE_OUTPUT:-<config noise_output.path>}"
+echo "Signal input overrides: ${SIGNAL_INPUTS:-<config signal_inputs>}"
 echo "LD_LIBRARY_PATH: ${LD_LIBRARY_PATH:-}"
 
-CMD=("$PYTHON_BIN" -u -m tianqin_dc.minimal_catalog_aet_tq_numorbit --config "$CONFIG")
-CMD+=(--workers "$WORKERS")
+CMD=("$PYTHON_BIN" -u -m tianqin_dc.merge_minimal_aet --config "$CONFIG")
+if [[ -n "${SIGNAL_INPUTS:-}" ]]; then
+  IFS=':' read -r -a INPUT_ARRAY <<< "$SIGNAL_INPUTS"
+  for input_path in "${INPUT_ARRAY[@]}"; do
+    if [[ -n "$input_path" ]]; then
+      CMD+=(--input "$input_path")
+    fi
+  done
+fi
 if [[ -n "${OUTPUT:-}" ]]; then
   CMD+=(--output "$OUTPUT")
 fi
-if [[ -n "${SOURCE_METADATA_OUTPUT:-}" ]]; then
-  CMD+=(--source-metadata-output "$SOURCE_METADATA_OUTPUT")
-fi
-if [[ "${NO_SOURCE_METADATA_OUTPUT:-0}" == "1" ]]; then
-  CMD+=(--no-source-metadata-output)
-fi
-if [[ -n "${MAX_SOURCES:-}" ]]; then
-  CMD+=(--max-sources "$MAX_SOURCES")
+if [[ "${NO_NOISE_OUTPUT:-0}" == "1" ]]; then
+  CMD+=(--no-noise-output)
+elif [[ -n "${NOISE_OUTPUT:-}" ]]; then
+  CMD+=(--noise-output "$NOISE_OUTPUT")
 fi
 if [[ "${DRY_RUN:-0}" == "1" ]]; then
   CMD+=(--dry-run)

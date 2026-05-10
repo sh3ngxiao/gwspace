@@ -24,7 +24,7 @@ THREADS_PER_WORKER="${THREADS_PER_WORKER:-1}"
 mkdir -p "$LOG_DIR"
 cd "$PROJECT_ROOT"
 
-if type module >/dev/null 2>&1; then
+if type module >/dev/null 2>&1 && { command -v modulecmd >/dev/null 2>&1 || [[ -x /usr/bin/modulecmd ]]; }; then
   module load apps/anaconda202309 || echo "[WARN] Failed to load module apps/anaconda202309"
   module load gsl2.7.1 || module load gsl || echo "[WARN] Failed to load a GSL module"
 fi

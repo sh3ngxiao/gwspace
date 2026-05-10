@@ -1,11 +1,10 @@
 #!/bin/bash
 #SBATCH -J tj_min_smbhb_phd
 #SBATCH -p gpu_part
-# #SBATCH -w comput6
 #SBATCH -N 1
 #SBATCH -n 1
-#SBATCH --cpus-per-task=50
-#SBATCH --mem=256G
+#SBATCH --cpus-per-task=55
+#SBATCH --mem=1T
 #SBATCH --time=72:00:00
 #SBATCH -o /public/home/zhuangzhenye/jobs/gwspace_runs/logs/%x-%j.out
 #SBATCH -e /public/home/zhuangzhenye/jobs/gwspace_runs/logs/%x-%j.err

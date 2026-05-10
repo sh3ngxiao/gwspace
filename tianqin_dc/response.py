@@ -98,6 +98,116 @@ def rfft_spectrum_to_time_series(
     )
 
 
+def _numerical_detector_time_window(detector: str) -> tuple[float, float] | None:
+    try:
+        from gwspace.Orbit import detectors
+        from tianqin_dc.numerical_tq_orbit import NumericalTianQinOrbit, numerical_orbit_time_window_s
+    except Exception:
+        return None
+
+    if detectors.get(detector) is not NumericalTianQinOrbit:
+        return None
+    return numerical_orbit_time_window_s()
+
+
+def _is_eccfd_waveform(waveform: Any) -> bool:
+    return callable(getattr(waveform, "get_ori_waveform", None))
+
+
+def _generate_eccfd_tdi_response(
+    waveform: Any,
+    f_series: np.ndarray,
+    *,
+    channel: str,
+    detector: str,
+    tdi_generation: int,
+    response_kwargs: dict[str, Any],
+) -> tuple[np.ndarray, np.ndarray]:
+    from gwspace.Waveform import check_detector_and_channel
+
+    trans_func, det_class = check_detector_and_channel(detector, channel)
+    waveform_components, freq = waveform.get_ori_waveform(
+        f_series=f_series,
+        space_cutoff=True,
+    )
+    freq = np.asarray(freq, dtype=np.float64)
+    gw_tdi = np.zeros((3, len(freq)), dtype=np.complex128)
+    t_delay = np.exp(2j * np.pi * freq * waveform.tc)
+    p_p, p_c = waveform.polarization()
+    detector_time_window = _numerical_detector_time_window(detector)
+
+    for h_p, h_c, tf_vec in waveform_components:
+        h_p = np.asarray(h_p)
+        h_c = np.asarray(h_c)
+        tf_vec = np.asarray(tf_vec, dtype=np.float64)
+        active = (h_p != 0.0) | (h_c != 0.0)
+        if detector_time_window is not None:
+            start_s, stop_s = detector_time_window
+            active &= (tf_vec >= start_s) & (tf_vec <= stop_s)
+
+        indices = np.flatnonzero(active)
+        if indices.size == 0:
+            continue
+
+        det_obj = det_class(tf_vec[indices], **response_kwargs)
+        gw_tdi_p, gw_tdi_c = trans_func(
+            waveform.vec_k,
+            (p_p, p_c),
+            det_obj,
+            freq[indices],
+            tdi_generation,
+        )
+        gw_tdi[:, indices] += gw_tdi_p * h_p[None, indices] + gw_tdi_c * h_c[None, indices]
+
+    return gw_tdi * t_delay, freq
+
+
+def _can_generate_amp_phase_tdi_response(waveform: Any) -> bool:
+    return callable(getattr(waveform, "get_amp_phase", None)) and callable(getattr(waveform, "p_lm", None))
+
+
+def _generate_amp_phase_tdi_response(
+    waveform: Any,
+    f_series: np.ndarray,
+    *,
+    channel: str,
+    detector: str,
+    tdi_generation: int,
+    response_kwargs: dict[str, Any],
+) -> np.ndarray:
+    from gwspace.Waveform import check_detector_and_channel
+
+    trans_func, det_class = check_detector_and_channel(detector, channel)
+    amp, phase, tf = waveform.get_amp_phase(f_series=f_series)
+    gw_tdi = np.zeros((3, len(f_series)), dtype=np.complex128)
+    t_delay = np.exp(2j * np.pi * f_series * waveform.tc)
+    detector_time_window = _numerical_detector_time_window(detector)
+
+    for mode in amp.keys():
+        h_lm = np.asarray(amp[mode]) * np.exp(1j * np.asarray(phase[mode]))
+        tf_vec = np.asarray(tf[mode], dtype=np.float64)
+        active = h_lm != 0.0
+        if detector_time_window is not None:
+            start_s, stop_s = detector_time_window
+            active &= (tf_vec >= start_s) & (tf_vec <= stop_s)
+
+        indices = np.flatnonzero(active)
+        if indices.size == 0:
+            continue
+
+        det_obj = det_class(tf_vec[indices], **response_kwargs)
+        gw_tdi_lm = trans_func(
+            waveform.vec_k,
+            waveform.p_lm(*mode),
+            det_obj,
+            f_series[indices],
+            tdi_generation,
+        )[0]
+        gw_tdi[:, indices] += gw_tdi_lm * h_lm[None, indices]
+
+    return gw_tdi * t_delay
+
+
 def _generate_tdi_fd(
     waveform: Any,
     observation: ObservationConfig,
@@ -121,13 +231,35 @@ def _generate_tdi_fd(
         if positive_freq.size == 0:
             return np.zeros((3, observation.num_samples), dtype=np.float64), positive_freq
 
-    response = waveform.get_tdi_response(
-        f_series=positive_freq,
-        channel=channel,
-        det=observation.detector,
-        TDIgen=observation.tdi_generation,
-        **kwargs,
-    )
+    if _is_eccfd_waveform(waveform):
+        response = _generate_eccfd_tdi_response(
+            waveform,
+            positive_freq,
+            channel=channel,
+            detector=observation.detector,
+            tdi_generation=observation.tdi_generation,
+            response_kwargs=kwargs,
+        )
+    elif (
+        _numerical_detector_time_window(observation.detector) is not None
+        and _can_generate_amp_phase_tdi_response(waveform)
+    ):
+        response = _generate_amp_phase_tdi_response(
+            waveform,
+            positive_freq,
+            channel=channel,
+            detector=observation.detector,
+            tdi_generation=observation.tdi_generation,
+            response_kwargs=kwargs,
+        )
+    else:
+        response = waveform.get_tdi_response(
+            f_series=positive_freq,
+            channel=channel,
+            det=observation.detector,
+            TDIgen=observation.tdi_generation,
+            **kwargs,
+        )
     if isinstance(response, tuple):
         fd_channels, freq_out = response
         freq_out = np.asarray(freq_out, dtype=np.float64)

@@ -127,6 +127,15 @@ def _prepare_times(time: np.ndarray, path: str) -> tuple[np.ndarray, np.ndarray,
     return lower, lower + 1, fraction
 
 
+def numerical_orbit_time_window_s(orbit_path: str | None = None) -> tuple[float, float]:
+    """Return the valid detector-time request window for the numerical orbit."""
+
+    path = str(Path(orbit_path or _default_orbit_path()).expanduser().resolve())
+    start, stop, _step = _orbit_time_bounds(path)
+    offset = _time_offset_s()
+    return start - offset, stop - offset
+
+
 def _interpolate_column(
     table: np.ndarray,
     lower: np.ndarray,

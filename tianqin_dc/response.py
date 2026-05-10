@@ -107,6 +107,20 @@ def _generate_tdi_fd(
 ) -> tuple[np.ndarray, np.ndarray]:
     kwargs = dict(response_kwargs or {})
     full_freq, positive_freq = response_frequency_grid(observation)
+
+    response_f_min = kwargs.pop("response_f_min_hz", None)
+    if response_f_min is None:
+        response_f_min = kwargs.pop("f_min_hz", None)
+    if response_f_min is None:
+        response_f_min = getattr(waveform, "add_para", {}).get("response_f_min_hz")
+    if response_f_min is not None:
+        response_f_min = float(response_f_min)
+        if response_f_min < 0.0:
+            raise ValueError("response_f_min_hz must be non-negative.")
+        positive_freq = positive_freq[positive_freq >= response_f_min]
+        if positive_freq.size == 0:
+            return np.zeros((3, observation.num_samples), dtype=np.float64), positive_freq
+
     response = waveform.get_tdi_response(
         f_series=positive_freq,
         channel=channel,

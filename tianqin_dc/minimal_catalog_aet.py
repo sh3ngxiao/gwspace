@@ -579,28 +579,44 @@ def _build_minimal_catalog_aet_parallel(
                 )
             )
 
-        results: list[dict[str, Any]] = []
+        metadata_results: list[dict[str, Any]] = []
         context = _multiprocessing_context()
         with context.Pool(processes=config.workers) as pool:
             for result in pool.imap_unordered(_generate_minimal_aet_shard, tasks):
+                partial = result["partial"]
                 for channel in ("A", "E", "T"):
-                    summed[channel] += np.asarray(result["partial"][channel], dtype=np.float64)
+                    summed[channel] += np.asarray(partial[channel], dtype=np.float64)
                 processed += int(result["processed"])
-                results.append(result)
+                metadata_results.append(
+                    {
+                        "shard_index": result["shard_index"],
+                        "metadata_part_path": result["metadata_part_path"],
+                    }
+                )
                 print(
                     f"Finished shard {int(result['shard_index']) + 1}/{config.workers}: "
                     f"{int(result['processed'])} {config.kind} catalog sources.",
                     flush=True,
                 )
+                del partial
+                del result
+            print("All shard results received; closing worker pool.", flush=True)
+
+        print(
+            f"Worker pool closed; merged {processed} {config.kind} catalog sources into memory.",
+            flush=True,
+        )
 
         if processed == 0:
             raise ValueError(f"No {config.kind} catalog entries were selected.")
         if writer is not None:
-            for result in sorted(results, key=lambda item: int(item["shard_index"])):
+            print(f"Merging source metadata parts into {config.source_metadata_output.path}.", flush=True)
+            for result in sorted(metadata_results, key=lambda item: int(item["shard_index"])):
                 part_path = result.get("metadata_part_path")
                 if part_path is not None:
                     writer.append_jsonl_file(part_path)
             writer.write_summary(processed=processed)
+            print("Finished source metadata merge.", flush=True)
 
     return time_s, summed, processed
 
@@ -675,6 +691,7 @@ def run_minimal_catalog_aet(
     raw_config: Mapping[str, Any] | None = None,
 ) -> Path:
     time_s, summed, processed = build_minimal_catalog_aet(config, raw_config)
+    print(f"Saving {config.kind} signal-only minimal A/E/T file to {config.output.path}.", flush=True)
     output_path = save_minimal_aet_hdf5(
         config.output,
         time_s=time_s,

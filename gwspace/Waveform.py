@@ -450,6 +450,14 @@ class GCBWaveform(BasicWaveform):
     def amplitude(self):
         return 2*(self.Mc*MTSUN_SI)**(5/3) * C_SI/(self.DL*MPC_SI) * (PI*self.f0)**(2/3)
 
+    @staticmethod
+    def _fastgb_detector_name(det):
+        if det == 'TQ':
+            return 'TianQin'
+        if det == 'Taiji':
+            return 'TaiJi'
+        return det
+
     def get_hphc(self, t):
         # FIXME: use self.T_obs
         phase = 2*PI*(self.f0 + 0.5*self.fdot*t + 1/6*self.fddot*t*t)*t + self.phi0
@@ -460,9 +468,10 @@ class GCBWaveform(BasicWaveform):
         return hp, hc
 
     def _buffer_size(self, det, oversample=1):
-        if det == 'TianQin':
+        detector = self._fastgb_detector_name(det)
+        if detector == 'TianQin':
             fm = 3.1771266198541054e-6  # fsc_tq
-        elif det in ('LISA', 'Taiji'):
+        elif detector in ('LISA', 'TaiJi'):
             fm = 3.168753578692357e-8  # EarthOrbitFreq_SI
         else:
             raise ValueError(f"Unknown detector {det}.")
@@ -481,6 +490,7 @@ class GCBWaveform(BasicWaveform):
         :param buffer: Should be a tuple with
         """
         # FIXME: assume T=T_obs below
+        detector = self._fastgb_detector_name(detector)
         N = self._buffer_size(detector, oversample)
 
         XLS = np.zeros(2*N, 'd')

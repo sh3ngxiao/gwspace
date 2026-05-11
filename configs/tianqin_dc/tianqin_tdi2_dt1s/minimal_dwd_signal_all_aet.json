@@ -8,7 +8,7 @@
     "kind": "dwd"
   },
   "catalog": {
-    "path": "/public/home/zhuangzhenye/jobs/dwd_source/sim_lisa_part01.txt",
+    "path": "/public/home/zhuangzhenye/jobs/dwd_source/sim_lisa.txt",
     "select_all": true
   },
   "observation": {

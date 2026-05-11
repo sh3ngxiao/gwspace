@@ -1,0 +1,7 @@
+Omegaf = params['omega0'] * (frange/1e-4)**(params['alpha'])
+Sgw = Omegaf*(3/(4*frange**3))*(params['H0']/np.pi)**2
+
+params['omega0'] = 6e-14
+params['alpha'] = float(2/3)
+params['H0'] = 2.2*10**(-18)
+frange= np.linspace(1/3600,0.1,360)# 频率点

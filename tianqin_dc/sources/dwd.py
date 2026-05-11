@@ -8,11 +8,12 @@ from gwspace.Waveform import GCBWaveform
 
 from tianqin_dc.config import ObservationConfig
 from tianqin_dc.models import SourceGenerationResult
-from tianqin_dc.response import generate_tdi_channels_td
 from tianqin_dc.sources.gcb import GCBSourceFactory
 
 
 _TWO_PI = float(2.0 * np.pi)
+_FASTGB_ENGINE = "gwspace:fastgb"
+_FASTGB_AET_IMPLEMENTATION = "fastgb_fd_xyz_irfft_aet"
 
 
 class CatalogDWDWaveform(GCBWaveform):
@@ -55,10 +56,147 @@ class CatalogDWDWaveform(GCBWaveform):
         return self.catalog_amp
 
 
+def _fastgb_detector_name(detector: str) -> str:
+    normalized = GCBWaveform._fastgb_detector_name(detector)
+    if normalized not in ("TianQin", "LISA", "TaiJi"):
+        raise ValueError(f"Unsupported FastGB detector '{detector}'.")
+    return normalized
+
+
+def empty_fastgb_xyz_frequency_buffers(observation: ObservationConfig) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    length = observation.num_samples // 2 + 1
+    return (
+        np.zeros(length, dtype=np.complex128),
+        np.zeros(length, dtype=np.complex128),
+        np.zeros(length, dtype=np.complex128),
+    )
+
+
+def fastgb_xyz_frequency_buffers_to_xyz_td(
+    buffers: tuple[np.ndarray, np.ndarray, np.ndarray],
+    observation: ObservationConfig,
+) -> dict[str, np.ndarray]:
+    expected = observation.num_samples // 2 + 1
+    n_samples = observation.num_samples
+    channels: dict[str, np.ndarray] = {}
+    for name, spectrum in zip(("X", "Y", "Z"), buffers, strict=True):
+        array = np.asarray(spectrum, dtype=np.complex128)
+        if array.shape != (expected,):
+            raise ValueError(f"FastGB {name} spectrum has shape {array.shape}, expected {(expected,)}.")
+        channels[name] = np.fft.irfft(array * n_samples, n=n_samples).astype(np.float64, copy=False)
+    return channels
+
+
+def fastgb_xyz_to_aet_channels(
+    xyz: dict[str, np.ndarray],
+    observation: ObservationConfig,
+) -> dict[str, np.ndarray]:
+    x = np.asarray(xyz["X"], dtype=np.float64)
+    y = np.asarray(xyz["Y"], dtype=np.float64)
+    z = np.asarray(xyz["Z"], dtype=np.float64)
+    full = {
+        "A": (z - x) / np.sqrt(2.0),
+        "E": (x - 2.0 * y + z) / np.sqrt(6.0),
+        "T": (x + y + z) / np.sqrt(3.0),
+    }
+    return {channel: full[channel].astype(np.float64, copy=False) for channel in observation.channels}
+
+
+def fastgb_xyz_frequency_buffers_to_aet_channels(
+    buffers: tuple[np.ndarray, np.ndarray, np.ndarray],
+    observation: ObservationConfig,
+) -> dict[str, np.ndarray]:
+    return fastgb_xyz_to_aet_channels(fastgb_xyz_frequency_buffers_to_xyz_td(buffers, observation), observation)
+
+
+def _fastgb_metadata(observation: ObservationConfig, *, oversample: int) -> dict[str, Any]:
+    return {
+        "detector_requested": observation.detector,
+        "detector_fastgb": _fastgb_detector_name(observation.detector),
+        "tdi_generation_requested": observation.tdi_generation,
+        "fastgb_oversample": int(oversample),
+        "frequency_bins": observation.num_samples // 2 + 1,
+    }
+
+
+def _fastgb_notes(
+    observation: ObservationConfig,
+    *,
+    catalog_parameterization: bool,
+) -> list[str]:
+    notes = [
+        "DWD generated with FastGB frequency-domain XYZ response and converted to time-domain channels by inverse rFFT.",
+    ]
+    if catalog_parameterization:
+        notes.append(
+            "Input parameters came from an amplitude-driven DWD source table instead of the mass-distance GCB parameterization."
+        )
+    if observation.tdi_generation != 1:
+        notes.append(
+            "FastGB XYZ generation does not expose a TDI-generation selector; the requested tdi_generation is recorded in metadata."
+        )
+    return notes
+
+
+def _build_fastgb_dwd_waveform(
+    factory: "DWDSourceFactory",
+    parameters: dict[str, Any],
+    observation: ObservationConfig,
+) -> tuple[GCBWaveform, dict[str, Any], bool]:
+    catalog_parameterization = (
+        factory._is_catalog_parameterization(parameters)
+        or factory._is_normalized_catalog_parameterization(parameters)
+    )
+    prepared = factory.prepare_parameters(parameters, observation)
+    if catalog_parameterization:
+        waveform = CatalogDWDWaveform(**prepared)
+    else:
+        waveform = GCBWaveform(**prepared)
+    return waveform, prepared, catalog_parameterization
+
+
+def add_dwd_to_fastgb_frequency_buffers(
+    factory: "DWDSourceFactory",
+    parameters: dict[str, Any],
+    observation: ObservationConfig,
+    buffers: tuple[np.ndarray, np.ndarray, np.ndarray],
+    *,
+    oversample: int = 1,
+) -> tuple[dict[str, Any], bool]:
+    waveform, prepared, catalog_parameterization = _build_fastgb_dwd_waveform(factory, parameters, observation)
+    waveform.get_fastgb_fd_single(
+        observation.sample_spacing_s,
+        oversample=oversample,
+        detector=_fastgb_detector_name(observation.detector),
+        buffer=buffers,
+    )
+    return prepared, catalog_parameterization
+
+
+def generate_fastgb_dwd_aet_channels(
+    factory: "DWDSourceFactory",
+    parameters: dict[str, Any],
+    observation: ObservationConfig,
+    *,
+    oversample: int = 1,
+) -> tuple[dict[str, np.ndarray], dict[str, Any], bool]:
+    buffers = empty_fastgb_xyz_frequency_buffers(observation)
+    prepared, catalog_parameterization = add_dwd_to_fastgb_frequency_buffers(
+        factory,
+        parameters,
+        observation,
+        buffers,
+        oversample=oversample,
+    )
+    return fastgb_xyz_frequency_buffers_to_aet_channels(buffers, observation), prepared, catalog_parameterization
+
+
 class DWDSourceFactory(GCBSourceFactory):
     kind = "dwd"
     family = "galactic_binary"
-    default_engine = "gwspace:gcb"
+    default_engine = _FASTGB_ENGINE
+    default_implementation = _FASTGB_AET_IMPLEMENTATION
+    domain = "frequency_to_time"
     catalog_required_parameters = (
         "f0",
         "dfdt_0",
@@ -80,7 +218,7 @@ class DWDSourceFactory(GCBSourceFactory):
         "phi0",
     )
     notes = (
-        "In this prototype, 'dwd' is implemented with the same GWspace GCBWaveform backend used for 'gcb'.",
+        "DWD uses GWspace FastGB through the GCBWaveform FastGB adapter.",
         "The distinction is semantic: 'dwd' is the challenge-level detached white-dwarf-binary label, while 'gcb' remains a broader GWspace/foreground label.",
         "DWD catalogs in the 8-column LISA source-table format are also supported through a local amplitude-driven waveform adapter.",
     )
@@ -155,17 +293,33 @@ class DWDSourceFactory(GCBSourceFactory):
         return super().prepare_parameters(parameters, observation)
 
     def generate(self, parameters: dict[str, Any], observation: ObservationConfig) -> SourceGenerationResult:
-        if self._is_catalog_parameterization(parameters) or self._is_normalized_catalog_parameterization(parameters):
-            prepared = self.prepare_parameters(parameters, observation)
-            waveform = CatalogDWDWaveform(**prepared)
-            channels = generate_tdi_channels_td(waveform, observation.time_array(), observation)
-            return self.make_result(
-                channels,
-                prepared,
-                implementation="catalog_td_response",
-                notes=[
-                    "Input parameters came from an amplitude-driven DWD source table instead of the mass-distance GCB parameterization.",
-                ],
-                metadata={"catalog_parameterization": True},
-            )
-        return super().generate(parameters, observation)
+        channels, prepared, catalog_parameterization = generate_fastgb_dwd_aet_channels(self, parameters, observation)
+        return self.make_fastgb_result(
+            channels,
+            prepared,
+            observation,
+            catalog_parameterization=catalog_parameterization,
+        )
+
+    def make_fastgb_result(
+        self,
+        channels: dict[str, Any],
+        prepared: dict[str, Any],
+        observation: ObservationConfig,
+        *,
+        catalog_parameterization: bool,
+        implementation: str = _FASTGB_AET_IMPLEMENTATION,
+        oversample: int = 1,
+    ) -> SourceGenerationResult:
+        return self.make_result(
+            channels,
+            prepared,
+            engine=_FASTGB_ENGINE,
+            implementation=implementation,
+            domain="frequency_to_time",
+            notes=_fastgb_notes(observation, catalog_parameterization=catalog_parameterization),
+            metadata={
+                **_fastgb_metadata(observation, oversample=oversample),
+                "catalog_parameterization": bool(catalog_parameterization),
+            },
+        )

@@ -27,6 +27,12 @@ from tianqin_dc.smbhb_export import (
     _parameters_from_catalog_entry as smbhb_parameters_from_catalog_entry,
 )
 from tianqin_dc.sources import get_source_factory
+from tianqin_dc.sources.dwd import (
+    DWDSourceFactory,
+    add_dwd_to_fastgb_frequency_buffers,
+    empty_fastgb_xyz_frequency_buffers,
+    fastgb_xyz_frequency_buffers_to_aet_channels,
+)
 
 
 SUPPORTED_CATALOG_KINDS = ("dwd", "emri", "sbbh", "smbhb")
@@ -465,8 +471,81 @@ def _metadata_writer(
     )
 
 
+def _generate_minimal_dwd_fastgb_aet_shard(
+    args: tuple[int, int, MinimalCatalogAETConfig, int, int, str | None],
+) -> dict[str, Any]:
+    shard_index, shard_count, config, selection_seed, generation_seed, metadata_part_path = args
+    observation = config.observation
+    buffers = empty_fastgb_xyz_frequency_buffers(observation)
+    factory = DWDSourceFactory()
+    selection_rng = np.random.default_rng(selection_seed)
+    generation_rng = np.random.default_rng(generation_seed)
+    entries = _iter_selected_entries(config.kind, config.catalog, selection_rng)
+
+    processed = 0
+    visited = 0
+    if metadata_part_path is None:
+        metadata_handle_context: Any = nullcontext(None)
+    else:
+        metadata_handle_context = Path(metadata_part_path).open("w", encoding="utf-8")
+
+    with metadata_handle_context as metadata_handle:
+        for entry in entries:
+            visited += 1
+            parameters = _source_parameters_from_entry(config.kind, entry, config, generation_rng)
+            if (visited - 1) % shard_count != shard_index:
+                continue
+            try:
+                prepared, catalog_parameterization = add_dwd_to_fastgb_frequency_buffers(
+                    factory,
+                    parameters,
+                    observation,
+                    buffers,
+                )
+                generated = factory.make_fastgb_result(
+                    {},
+                    prepared,
+                    observation,
+                    catalog_parameterization=catalog_parameterization,
+                )
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Failed to generate {config.kind} source #{visited} from {_entry_label(entry)} "
+                    f"in shard {shard_index + 1}/{shard_count}."
+                ) from exc
+            processed += 1
+            if metadata_handle is not None:
+                _write_jsonl_line(
+                    metadata_handle,
+                    _source_metadata_payload(
+                        kind=config.kind,
+                        source_index=visited,
+                        entry=entry,
+                        source_parameters=parameters,
+                        generated=generated,
+                    ),
+                )
+            if config.progress_interval and processed % config.progress_interval == 0:
+                print(
+                    f"Processed {processed} {config.kind} catalog sources "
+                    f"in shard {shard_index + 1}/{shard_count}.",
+                    flush=True,
+                )
+
+    partial = fastgb_xyz_frequency_buffers_to_aet_channels(buffers, observation)
+    return {
+        "shard_index": shard_index,
+        "processed": processed,
+        "partial": partial,
+        "metadata_part_path": metadata_part_path,
+    }
+
+
 def _generate_minimal_aet_shard(args: tuple[int, int, MinimalCatalogAETConfig, int, int, str | None]) -> dict[str, Any]:
     shard_index, shard_count, config, selection_seed, generation_seed, metadata_part_path = args
+    if config.kind == "dwd":
+        return _generate_minimal_dwd_fastgb_aet_shard(args)
+
     observation = config.observation
     partial = {channel: np.zeros(observation.num_samples, dtype=np.float64) for channel in ("A", "E", "T")}
     factory = get_source_factory(config.kind)
@@ -621,10 +700,79 @@ def _build_minimal_catalog_aet_parallel(
     return time_s, summed, processed
 
 
+def _build_minimal_dwd_fastgb_aet_serial(
+    config: MinimalCatalogAETConfig,
+    raw_config: Mapping[str, Any] | None = None,
+) -> tuple[np.ndarray, dict[str, np.ndarray], int]:
+    root_sequence = np.random.SeedSequence(config.seed)
+    selection_sequence, generation_sequence = root_sequence.spawn(2)
+    selection_seed = _child_seed(selection_sequence)
+    generation_seed = _child_seed(generation_sequence)
+    selection_rng = np.random.default_rng(selection_seed)
+    generation_rng = np.random.default_rng(generation_seed)
+
+    observation = config.observation
+    time_s = observation.time_array()
+    buffers = empty_fastgb_xyz_frequency_buffers(observation)
+    factory = DWDSourceFactory()
+
+    processed = 0
+    entries = _iter_selected_entries(config.kind, config.catalog, selection_rng)
+    writer = _metadata_writer(
+        config,
+        raw_config,
+        selection_seed=selection_seed,
+        generation_seed=generation_seed,
+    )
+    with writer if writer is not None else nullcontext():
+        for entry in entries:
+            processed += 1
+            parameters = _source_parameters_from_entry(config.kind, entry, config, generation_rng)
+            try:
+                prepared, catalog_parameterization = add_dwd_to_fastgb_frequency_buffers(
+                    factory,
+                    parameters,
+                    observation,
+                    buffers,
+                )
+                generated = factory.make_fastgb_result(
+                    {},
+                    prepared,
+                    observation,
+                    catalog_parameterization=catalog_parameterization,
+                )
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Failed to generate {config.kind} source #{processed} from {_entry_label(entry)}."
+                ) from exc
+            if writer is not None:
+                writer.write_source(
+                    _source_metadata_payload(
+                        kind=config.kind,
+                        source_index=processed,
+                        entry=entry,
+                        source_parameters=parameters,
+                        generated=generated,
+                    )
+                )
+            if config.progress_interval and processed % config.progress_interval == 0:
+                print(f"Processed {processed} {config.kind} catalog sources.")
+
+        if processed == 0:
+            raise ValueError(f"No {config.kind} catalog entries were selected.")
+        if writer is not None:
+            writer.write_summary(processed=processed)
+
+    return time_s, fastgb_xyz_frequency_buffers_to_aet_channels(buffers, observation), processed
+
+
 def _build_minimal_catalog_aet_serial(
     config: MinimalCatalogAETConfig,
     raw_config: Mapping[str, Any] | None = None,
 ) -> tuple[np.ndarray, dict[str, np.ndarray], int]:
+    if config.kind == "dwd":
+        return _build_minimal_dwd_fastgb_aet_serial(config, raw_config)
+
     root_sequence = np.random.SeedSequence(config.seed)
     selection_sequence, generation_sequence = root_sequence.spawn(2)
     selection_seed = _child_seed(selection_sequence)

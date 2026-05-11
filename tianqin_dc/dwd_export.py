@@ -13,8 +13,12 @@ import numpy as np
 
 from tianqin_dc.config import DatasetConfig, ObservationConfig
 from tianqin_dc.dwd_catalog import DWDCatalogEntry, iter_dwd_catalog
-from tianqin_dc.response import generate_tdi_xyz_td
-from tianqin_dc.sources.dwd import CatalogDWDWaveform, DWDSourceFactory
+from tianqin_dc.sources.dwd import (
+    DWDSourceFactory,
+    add_dwd_to_fastgb_frequency_buffers,
+    empty_fastgb_xyz_frequency_buffers,
+    fastgb_xyz_frequency_buffers_to_xyz_td,
+)
 
 
 def _mapping(value: Any, *, field_name: str) -> Mapping[str, Any]:
@@ -268,7 +272,7 @@ def build_simple_dwd_bundle(config: SimpleDWDConfig, raw_config: dict[str, Any])
 
     observation = config.observation
     time_s = observation.time_array()
-    tdi_xyz = {channel: np.zeros_like(time_s, dtype=np.float64) for channel in ("X", "Y", "Z")}
+    buffers = empty_fastgb_xyz_frequency_buffers(observation)
 
     factory = DWDSourceFactory()
     source_sequences = generation_sequence.spawn(len(selected_entries))
@@ -277,12 +281,12 @@ def build_simple_dwd_bundle(config: SimpleDWDConfig, raw_config: dict[str, Any])
     for entry, source_sequence in zip(selected_entries, source_sequences, strict=True):
         source_seed = _child_seed(source_sequence)
         source_parameters = entry.to_source_parameters()
-        prepared_parameters = factory.prepare_parameters(source_parameters, observation)
-        waveform = CatalogDWDWaveform(**prepared_parameters)
-        channels = generate_tdi_xyz_td(waveform, time_s, observation)
-
-        for channel, series in channels.items():
-            tdi_xyz[channel] += np.asarray(series, dtype=np.float64)
+        prepared_parameters, _ = add_dwd_to_fastgb_frequency_buffers(
+            factory,
+            source_parameters,
+            observation,
+            buffers,
+        )
 
         source_records.append(
             {
@@ -294,7 +298,7 @@ def build_simple_dwd_bundle(config: SimpleDWDConfig, raw_config: dict[str, Any])
 
     return SimpleDWDBundle(
         time_s=time_s,
-        tdi_xyz=tdi_xyz,
+        tdi_xyz=fastgb_xyz_frequency_buffers_to_xyz_td(buffers, observation),
         selected_sources=source_records,
         run_config=deepcopy(raw_config),
     )

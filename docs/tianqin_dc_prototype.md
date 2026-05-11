@@ -25,9 +25,9 @@ This prototype follows the pipeline:
 
 ## Source-Type Relationships
 
-- `dwd` and `gcb` currently share the same GWspace `GCBWaveform` engine.
+- `dwd` uses GWspace `FastGB` through the `GCBWaveform` FastGB adapter.
   - `dwd` is the challenge-level detached-white-dwarf-binary label.
-  - `gcb` is kept as the broader GWspace/foreground label.
+  - `gcb` is kept as the broader GWspace/foreground label and uses the standard GWspace GCB path unless explicitly routed elsewhere.
 - `sbbh` and `smbhb` currently share the same compact-binary engine family.
   - By default the resolver uses `bhb_EccFD`.
   - If `PyIMRPhenomD` becomes available later, `engine="bhb_PhenomD"` can be requested in config.
@@ -55,7 +55,8 @@ python -m tianqin_dc.dwd_cli --config configs/tianqin_dc/dwd_catalog_batch.json
 ## Catalog-Driven DWD Export
 
 For large 8-column DWD source tables such as `tianqin_dc/sim_lisa_part01.txt`, use
-`python -m tianqin_dc.dwd_cli`. The exporter maps the columns
+`python -m tianqin_dc.dwd_cli`. The exporter accumulates FastGB frequency-domain
+`X/Y/Z` buffers and maps the columns
 
 - `f0`
 - `dfdt_0`

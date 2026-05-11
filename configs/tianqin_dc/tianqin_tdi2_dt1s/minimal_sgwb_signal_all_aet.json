@@ -16,7 +16,7 @@
     "model": "power_law",
     "omega_ref": 6.0e-12,
     "f_ref_hz": 1.0e-3,
-    "beta": 0.0,
+    "beta": 0.6666666666666666,
     "h0_km_s_mpc": 67.7,
     "f_min_hz": 1.0e-4,
     "f_max_hz": 1.0,

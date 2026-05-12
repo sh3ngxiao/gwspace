@@ -83,7 +83,8 @@ def fastgb_xyz_frequency_buffers_to_xyz_td(
         array = np.asarray(spectrum, dtype=np.complex128)
         if array.shape != (expected,):
             raise ValueError(f"FastGB {name} spectrum has shape {array.shape}, expected {(expected,)}.")
-        channels[name] = np.fft.irfft(array * n_samples, n=n_samples).astype(np.float64, copy=False)
+        # FastGB buffers already use the rFFT normalization expected by numpy.irfft.
+        channels[name] = np.fft.irfft(array, n=n_samples).astype(np.float64, copy=False)
     return channels
 
 

@@ -14,6 +14,7 @@ from gwspace.constants import YRSID_SI
 
 from tianqin_dc.bbh_catalog import BBHCatalogEntry, iter_bbh_catalog, redshift_to_luminosity_distance_mpc
 from tianqin_dc.config import DatasetConfig, ObservationConfig, SamplerConfig
+from tianqin_dc.plotting import save_time_domain_preview
 from tianqin_dc.response import generate_tdi_xyz_fd, generate_tdi_xyz_td
 from tianqin_dc.sampling import sample_value
 from tianqin_dc.sources.compact_binary import SBBHSourceFactory
@@ -480,6 +481,12 @@ def save_simple_bbh_hdf5(bundle: SimpleBBHBundle, config: SimpleBBHConfig) -> Pa
         _json_dataset(meta_group, "sources_json", bundle.selected_sources)
         _json_dataset(meta_group, "config_json", bundle.run_config)
 
+    save_time_domain_preview(
+        output_path,
+        bundle.time_s,
+        bundle.tdi_xyz,
+        title=f"{config.dataset.name} SBBH X/Y/Z",
+    )
     return output_path
 
 

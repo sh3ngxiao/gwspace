@@ -26,6 +26,7 @@ from tianqin_dc.emri_export import (
     _parameters_from_catalog_entry as emri_parameters_from_catalog_entry,
     _resolve_catalog_entries as resolve_emri_catalog_entries,
 )
+from tianqin_dc.plotting import save_time_domain_preview
 from tianqin_dc.sampling import sample_population_parameters
 from tianqin_dc.smbhb_export import (
     SMBHBCompletionConfig,
@@ -363,6 +364,12 @@ def save_aet_hdf5(path: Path, time_s: np.ndarray, channels: Mapping[str, np.ndar
         handle.create_dataset("a", data=np.asarray(channels["A"], dtype=np.float64))
         handle.create_dataset("e", data=np.asarray(channels["E"], dtype=np.float64))
         handle.create_dataset("t", data=np.asarray(channels["T"], dtype=np.float64))
+    save_time_domain_preview(
+        path,
+        time_s,
+        {"A": channels["A"], "E": channels["E"], "T": channels["T"]},
+        title=f"{path.name} A/E/T",
+    )
 
 
 def save_parameters_hdf5(

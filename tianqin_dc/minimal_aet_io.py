@@ -7,6 +7,8 @@ from typing import Any, Mapping
 import h5py
 import numpy as np
 
+from tianqin_dc.plotting import save_time_domain_preview
+
 
 MINIMAL_AET_DTYPE = np.dtype(
     [
@@ -98,6 +100,12 @@ def save_minimal_aet_hdf5(
             if chunk_index == total_chunks or chunk_index % progress_every == 0:
                 print(f"Wrote HDF5 chunk {chunk_index}/{total_chunks}.", flush=True)
 
+    save_time_domain_preview(
+        output_path,
+        arrays["time"],
+        {"A": arrays["a"], "E": arrays["e"], "T": arrays["t"]},
+        title=f"{output_path.name} A/E/T",
+    )
     return output_path
 
 

@@ -15,6 +15,7 @@ from gwspace.Waveform import waveforms
 
 from tianqin_dc.config import DatasetConfig, ObservationConfig, SamplerConfig
 from tianqin_dc.emri_catalog import EMRICatalogEntry, load_emri_catalog
+from tianqin_dc.plotting import save_time_domain_preview
 from tianqin_dc.response import generate_tdi_xyz_td
 from tianqin_dc.sampling import sample_value
 from tianqin_dc.sources.emri import EMRISourceFactory
@@ -388,6 +389,12 @@ def save_simple_emri_hdf5(bundle: SimpleEMRIBundle, config: SimpleEMRIConfig) ->
         _json_dataset(meta_group, "sources_json", bundle.selected_sources)
         _json_dataset(meta_group, "config_json", bundle.run_config)
 
+    save_time_domain_preview(
+        output_path,
+        bundle.time_s,
+        bundle.tdi_xyz,
+        title=f"{config.dataset.name} EMRI X/Y/Z",
+    )
     return output_path
 
 

@@ -10,6 +10,7 @@ import numpy as np
 
 from tianqin_dc.config import RunConfig
 from tianqin_dc.models import DatasetBundle
+from tianqin_dc.plotting import save_time_domain_preview
 
 
 def _json_dataset(group: h5py.Group, name: str, payload: Any) -> None:
@@ -138,4 +139,11 @@ def save_dataset_hdf5(bundle: DatasetBundle, config: RunConfig) -> Path:
         _json_dataset(provenance_group, "seed_book_json", bundle.seed_book)
         _json_dataset(provenance_group, "metadata_json", bundle.metadata)
 
+    preview_channels = bundle.observed or bundle.signal or bundle.noise
+    save_time_domain_preview(
+        output_path,
+        bundle.time_s,
+        preview_channels,
+        title=f"{config.dataset.name} observed channels",
+    )
     return output_path

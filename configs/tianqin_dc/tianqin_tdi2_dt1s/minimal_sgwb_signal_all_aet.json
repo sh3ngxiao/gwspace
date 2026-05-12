@@ -23,7 +23,7 @@
     "channel_response": {
       "A": 1.0,
       "E": 1.0,
-      "T": 0.0
+      "T": 1.0
     }
   },
   "output": {

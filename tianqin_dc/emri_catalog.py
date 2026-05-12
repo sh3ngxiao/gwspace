@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
 import re
 from typing import Any
@@ -95,6 +96,9 @@ def load_emri_catalog(path: str | Path) -> list[EMRICatalogEntry]:
     if not catalog_path.exists():
         raise FileNotFoundError(f"EMRI catalog file '{catalog_path}' does not exist.")
 
+    if catalog_path.suffix.lower() == ".jsonl":
+        return load_emri_source_table(catalog_path)
+
     metadata = parse_emri_catalog_filename(catalog_path)
     rows = np.loadtxt(catalog_path, dtype=np.float64, ndmin=2)
     if rows.ndim != 2 or rows.shape[1] != 5:
@@ -125,4 +129,78 @@ def load_emri_catalog(path: str | Path) -> list[EMRICatalogEntry]:
                 distance_gpc=float(row[4]),
             )
         )
+    return entries
+
+
+def _entry_from_mapping(data: dict[str, Any], *, path: Path, line_number: int) -> EMRICatalogEntry:
+    required_fields = (
+        "file_path",
+        "file_name",
+        "catalog_id",
+        "catalog_year",
+        "row_number",
+        "compact_object_mass_msun",
+        "sigma_model",
+        "npl_code",
+        "plunges_per_emri",
+        "cusp_model",
+        "jon_model",
+        "spin_model",
+        "log10_mbh_mass",
+        "redshift",
+        "mbh_spin",
+        "inclination",
+        "distance_gpc",
+    )
+    missing = [field for field in required_fields if field not in data]
+    if missing:
+        raise ValueError(
+            f"EMRI source table '{path}' line {line_number} is missing fields: {', '.join(missing)}."
+        )
+
+    return EMRICatalogEntry(
+        file_path=str(data["file_path"]),
+        file_name=str(data["file_name"]),
+        catalog_id=int(data["catalog_id"]),
+        catalog_year=int(data["catalog_year"]),
+        row_number=int(data["row_number"]),
+        compact_object_mass_msun=float(data["compact_object_mass_msun"]),
+        sigma_model=int(data["sigma_model"]),
+        npl_code=int(data["npl_code"]),
+        plunges_per_emri=int(data["plunges_per_emri"]),
+        cusp_model=int(data["cusp_model"]),
+        jon_model=int(data["jon_model"]),
+        spin_model=int(data["spin_model"]),
+        log10_mbh_mass=float(data["log10_mbh_mass"]),
+        redshift=float(data["redshift"]),
+        mbh_spin=float(data["mbh_spin"]),
+        inclination=float(data["inclination"]),
+        distance_gpc=float(data["distance_gpc"]),
+    )
+
+
+def load_emri_source_table(path: str | Path) -> list[EMRICatalogEntry]:
+    table_path = Path(path)
+    entries: list[EMRICatalogEntry] = []
+    with table_path.open("r", encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            payload = json.loads(stripped)
+            if not isinstance(payload, dict):
+                raise ValueError(f"EMRI source table '{table_path}' line {line_number} must be a JSON object.")
+
+            record_type = payload.get("record_type", "source")
+            if record_type != "source":
+                continue
+            entry_data = payload.get("catalog_entry", payload)
+            if not isinstance(entry_data, dict):
+                raise ValueError(
+                    f"EMRI source table '{table_path}' line {line_number} field 'catalog_entry' must be an object."
+                )
+            entries.append(_entry_from_mapping(entry_data, path=table_path, line_number=line_number))
+
+    if not entries:
+        raise ValueError(f"EMRI source table '{table_path}' contains no source records.")
     return entries

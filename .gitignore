@@ -17,3 +17,17 @@ src/pyIMRPhenomD.c
 dist/
 *.egg-info/
 *.egg
+**/sim_lisa_part*.txt
+**/sim_lisa_part*.txt
+
+# 忽略输出和日志目录
+outputs/
+logs/
+external/
+pyEccentricFD/
+
+# 忽略大数据和临时文件
+*.h5
+*.jsonl
+!tianqin_dc/EMRI_source/selected_100_space_detector_emri_sources.jsonl
+tianqin_dc/sim_lisa_part01.txt

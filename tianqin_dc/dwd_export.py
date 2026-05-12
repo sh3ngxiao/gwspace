@@ -13,6 +13,7 @@ import numpy as np
 
 from tianqin_dc.config import DatasetConfig, ObservationConfig
 from tianqin_dc.dwd_catalog import DWDCatalogEntry, iter_dwd_catalog
+from tianqin_dc.plotting import save_time_domain_preview
 from tianqin_dc.sources.dwd import (
     DWDSourceFactory,
     add_dwd_to_fastgb_frequency_buffers,
@@ -353,6 +354,12 @@ def save_simple_dwd_hdf5(bundle: SimpleDWDBundle, config: SimpleDWDConfig) -> Pa
         _json_dataset(meta_group, "sources_json", bundle.selected_sources)
         _json_dataset(meta_group, "config_json", bundle.run_config)
 
+    save_time_domain_preview(
+        output_path,
+        bundle.time_s,
+        bundle.tdi_xyz,
+        title=f"{config.dataset.name} DWD X/Y/Z",
+    )
     return output_path
 
 

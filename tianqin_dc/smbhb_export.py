@@ -14,6 +14,7 @@ from gwspace.constants import YRSID_SI
 
 from tianqin_dc.config import DatasetConfig, ObservationConfig, SamplerConfig
 from tianqin_dc.mbhb_catalog import MBHBCatalogEntry, iter_mbhb_catalog
+from tianqin_dc.plotting import save_time_domain_preview
 from tianqin_dc.response import generate_tdi_xyz_fd, generate_tdi_xyz_td
 from tianqin_dc.sampling import sample_value
 from tianqin_dc.sources.compact_binary import SMBHBSourceFactory
@@ -424,6 +425,12 @@ def save_simple_smbhb_hdf5(bundle: SimpleSMBHBBundle, config: SimpleSMBHBConfig)
         _json_dataset(meta_group, "sources_json", bundle.selected_sources)
         _json_dataset(meta_group, "config_json", bundle.run_config)
 
+    save_time_domain_preview(
+        output_path,
+        bundle.time_s,
+        bundle.tdi_xyz,
+        title=f"{config.dataset.name} SMBHB X/Y/Z",
+    )
     return output_path
 
 

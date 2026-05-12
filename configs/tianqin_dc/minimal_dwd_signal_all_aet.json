@@ -20,14 +20,14 @@
     "use_gpu": false
   },
   "output": {
-    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt5s/dwd_signal_all_aet.h5",
-    "overwrite": true,
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt5s/dwd_signal_all_aet_fft_norm_fixed.h5",
+    "overwrite": false,
     "compression": "gzip",
     "compression_level": 4
   },
   "source_metadata_output": {
-    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt5s/dwd_signal_all_aet.sources.jsonl",
-    "overwrite": true
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt5s/dwd_signal_all_aet_fft_norm_fixed.sources.jsonl",
+    "overwrite": false
   },
   "progress_interval": 10000
 }

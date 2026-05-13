@@ -20,22 +20,22 @@
     "use_gpu": false
   },
   "output": {
-    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_tianqin_tdi2_dt1s/emri_signal_all_aet.h5",
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_tianqin_tdi2_dt1s/emri_signal_all_aet_tianqin_tdi2_dt1s.h5",
     "overwrite": true,
     "compression": "gzip",
     "compression_level": 4
   },
   "source_metadata_output": {
-    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_tianqin_tdi2_dt1s/emri_signal_all_aet.sources.jsonl",
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_tianqin_tdi2_dt1s/emri_signal_all_aet_tianqin_tdi2_dt1s.sources.jsonl",
     "overwrite": true
   },
   "emri": {
     "use_catalog_inclination_for_x0": true,
     "fixed": {
-      "p0": 12.0,
       "backend": "cpu"
     },
     "sampler": {
+      "p0": { "distribution": "uniform", "low": 10.0, "high": 16.0 },
       "e0": { "distribution": "uniform", "low": 0.0, "high": 0.2 },
       "qS": { "distribution": "isotropic_polar" },
       "phiS": { "distribution": "uniform", "low": 0.0, "high": 6.283185307179586 },
@@ -44,6 +44,14 @@
       "Phi_phi0": { "distribution": "uniform", "low": 0.0, "high": 6.283185307179586 },
       "Phi_theta0": { "distribution": "uniform", "low": 0.0, "high": 6.283185307179586 },
       "Phi_r0": { "distribution": "uniform", "low": 0.0, "high": 6.283185307179586 }
+    },
+    "placement": {
+      "enabled": true,
+      "anchor": "end",
+      "time_unit": "fraction",
+      "time_sampler": { "distribution": "uniform", "low": 0.2, "high": 1.4 },
+      "allow_outside": true,
+      "threshold_fraction": 1e-6
     }
   },
   "progress_interval": 1000

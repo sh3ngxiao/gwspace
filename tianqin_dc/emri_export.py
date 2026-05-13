@@ -36,6 +36,11 @@ _DEFAULT_FIXED_PARAMETERS: dict[str, Any] = {
     "p0": 12.0,
     "backend": "cpu",
 }
+_DEFAULT_PLACEMENT_TIME_SAMPLER: dict[str, Any] = {
+    "distribution": "uniform",
+    "low": 0.05,
+    "high": 0.95,
+}
 
 
 def _mapping(value: Any, *, field_name: str) -> Mapping[str, Any]:
@@ -160,16 +165,67 @@ class EMRICatalogSelectionConfig:
 
 
 @dataclass(frozen=True)
+class EMRIPlacementConfig:
+    enabled: bool = False
+    anchor: str = "peak"
+    time_sampler: SamplerConfig = field(
+        default_factory=lambda: SamplerConfig.from_config(deepcopy(_DEFAULT_PLACEMENT_TIME_SAMPLER))
+    )
+    time_unit: str = "fraction"
+    allow_outside: bool = False
+    threshold_fraction: float = 1e-6
+    threshold_abs: float = 0.0
+
+    @classmethod
+    def from_config(cls, value: Any) -> "EMRIPlacementConfig":
+        if value is None:
+            return cls()
+        if isinstance(value, bool):
+            return cls(enabled=value)
+
+        data = _mapping(value, field_name="emri.placement")
+        anchor = str(data.get("anchor", "peak")).lower()
+        if anchor not in {"start", "peak", "end"}:
+            raise ValueError("Config field 'emri.placement.anchor' must be one of: start, peak, end.")
+
+        time_unit = str(data.get("time_unit", "fraction")).lower()
+        if time_unit not in {"fraction", "duration_fraction", "seconds", "s"}:
+            raise ValueError(
+                "Config field 'emri.placement.time_unit' must be 'fraction' or 'seconds'."
+            )
+
+        sampler_raw = data.get("time_sampler", data.get("sampler", _DEFAULT_PLACEMENT_TIME_SAMPLER))
+        threshold_fraction = float(data.get("threshold_fraction", 1e-6))
+        threshold_abs = float(data.get("threshold_abs", 0.0))
+        if threshold_fraction < 0.0:
+            raise ValueError("Config field 'emri.placement.threshold_fraction' must be non-negative.")
+        if threshold_abs < 0.0:
+            raise ValueError("Config field 'emri.placement.threshold_abs' must be non-negative.")
+
+        return cls(
+            enabled=bool(data.get("enabled", True)),
+            anchor=anchor,
+            time_sampler=SamplerConfig.from_config(sampler_raw),
+            time_unit=time_unit,
+            allow_outside=bool(data.get("allow_outside", False)),
+            threshold_fraction=threshold_fraction,
+            threshold_abs=threshold_abs,
+        )
+
+
+@dataclass(frozen=True)
 class EMRICompletionConfig:
     fixed: dict[str, Any] = field(default_factory=dict)
     sampler: dict[str, SamplerConfig] = field(default_factory=dict)
     use_catalog_inclination_for_x0: bool = True
+    placement: EMRIPlacementConfig = field(default_factory=EMRIPlacementConfig)
 
     @classmethod
     def from_config(cls, value: Mapping[str, Any] | None) -> "EMRICompletionConfig":
         data = {} if value is None else _maybe_mapping(value, field_name="emri")
+        explicit_fixed = _maybe_mapping(data.get("fixed"), field_name="emri.fixed")
         fixed = deepcopy(_DEFAULT_FIXED_PARAMETERS)
-        fixed.update(_maybe_mapping(data.get("fixed"), field_name="emri.fixed"))
+        fixed.update(explicit_fixed)
 
         sampler = {
             name: SamplerConfig.from_config(spec) for name, spec in deepcopy(_DEFAULT_SAMPLER_CONFIGS).items()
@@ -187,12 +243,16 @@ class EMRICompletionConfig:
 
         for name in tuple(sampler):
             if name in fixed:
-                sampler.pop(name)
+                if name in explicit_fixed:
+                    sampler.pop(name)
+                else:
+                    fixed.pop(name)
 
         return cls(
             fixed=fixed,
             sampler=sampler,
             use_catalog_inclination_for_x0=use_catalog_inclination_for_x0,
+            placement=EMRIPlacementConfig.from_config(data.get("placement")),
         )
 
 
@@ -302,6 +362,116 @@ def _parameters_from_catalog_entry(
     return parameters
 
 
+def sample_emri_placement_target_time_s(
+    completion: EMRICompletionConfig,
+    observation: ObservationConfig,
+    rng: np.random.Generator,
+) -> float | None:
+    placement = completion.placement
+    if not placement.enabled:
+        return None
+
+    value = float(sample_value(placement.time_sampler, rng))
+    if placement.time_unit in {"fraction", "duration_fraction"}:
+        target_time_s = value * observation.effective_duration_s
+    else:
+        target_time_s = value
+
+    if not placement.allow_outside:
+        upper = max(0.0, observation.effective_duration_s - observation.sample_spacing_s)
+        target_time_s = float(np.clip(target_time_s, 0.0, upper))
+    return float(target_time_s)
+
+
+def apply_emri_time_placement(
+    channels: Mapping[str, np.ndarray],
+    observation: ObservationConfig,
+    placement: EMRIPlacementConfig,
+    target_time_s: float | None,
+) -> tuple[dict[str, np.ndarray], dict[str, Any] | None]:
+    if not placement.enabled or target_time_s is None:
+        return {name: np.asarray(values, dtype=np.float64) for name, values in channels.items()}, None
+
+    n_rows = observation.num_samples
+    if n_rows <= 0:
+        raise ValueError("Observation must contain at least one sample for EMRI placement.")
+
+    arrays = {name: np.asarray(values, dtype=np.float64) for name, values in channels.items()}
+    amplitude = np.zeros(n_rows, dtype=np.float64)
+    for name, values in arrays.items():
+        if values.shape != (n_rows,):
+            raise ValueError(f"Channel '{name}' has shape {values.shape}, expected {(n_rows,)}.")
+        np.maximum(amplitude, np.abs(values), out=amplitude)
+
+    peak_index = int(np.argmax(amplitude))
+    peak_value = float(amplitude[peak_index])
+    threshold = max(float(placement.threshold_abs), peak_value * float(placement.threshold_fraction))
+    active = np.flatnonzero(amplitude > threshold)
+    if active.size:
+        active_start_index = int(active[0])
+        active_end_index = int(active[-1])
+    else:
+        active_start_index = peak_index
+        active_end_index = peak_index
+
+    anchor_indices = {
+        "start": active_start_index,
+        "peak": peak_index,
+        "end": active_end_index,
+    }
+    anchor_index = anchor_indices[placement.anchor]
+    target_index = int(round(float(target_time_s) / observation.sample_spacing_s))
+    shift_samples = target_index - anchor_index
+
+    src_start = max(0, -shift_samples)
+    dst_start = max(0, shift_samples)
+    span = max(0, min(n_rows - src_start, n_rows - dst_start))
+    placed: dict[str, np.ndarray] = {}
+    for name, values in arrays.items():
+        output = np.zeros_like(values)
+        if span:
+            output[dst_start : dst_start + span] = values[src_start : src_start + span]
+        placed[name] = output
+
+    placed_active_start_index = active_start_index + shift_samples
+    placed_active_end_index = active_end_index + shift_samples
+    visible_active_start_index = max(0, placed_active_start_index)
+    visible_active_end_index = min(n_rows - 1, placed_active_end_index)
+    visible_active_samples = max(0, visible_active_end_index - visible_active_start_index + 1)
+
+    diagnostics = {
+        "enabled": True,
+        "anchor": placement.anchor,
+        "allow_outside": bool(placement.allow_outside),
+        "target_time_s": float(target_index * observation.sample_spacing_s),
+        "target_index": target_index,
+        "shift_samples": int(shift_samples),
+        "shift_s": float(shift_samples * observation.sample_spacing_s),
+        "threshold": threshold,
+        "threshold_fraction": float(placement.threshold_fraction),
+        "threshold_abs": float(placement.threshold_abs),
+        "original_peak_time_s": float(peak_index * observation.sample_spacing_s),
+        "original_peak_index": peak_index,
+        "original_peak_value": peak_value,
+        "original_active_start_time_s": float(active_start_index * observation.sample_spacing_s),
+        "original_active_end_time_s": float(active_end_index * observation.sample_spacing_s),
+        "original_active_samples": int(active_end_index - active_start_index + 1),
+        "placed_peak_time_s": float((peak_index + shift_samples) * observation.sample_spacing_s),
+        "placed_active_start_time_s": float(placed_active_start_index * observation.sample_spacing_s),
+        "placed_active_end_time_s": float(placed_active_end_index * observation.sample_spacing_s),
+        "visible_active_start_time_s": (
+            None if visible_active_samples == 0 else float(visible_active_start_index * observation.sample_spacing_s)
+        ),
+        "visible_active_end_time_s": (
+            None if visible_active_samples == 0 else float(visible_active_end_index * observation.sample_spacing_s)
+        ),
+        "visible_active_samples": int(visible_active_samples),
+        "cropped_left_samples": int(src_start),
+        "cropped_right_samples": int(n_rows - (src_start + span)),
+    }
+    return placed, diagnostics
+
+
 def build_simple_emri_bundle(config: SimpleEMRIConfig, raw_config: dict[str, Any]) -> SimpleEMRIBundle:
     root_sequence = np.random.SeedSequence(config.seed)
     selection_sequence, generation_sequence = root_sequence.spawn(2)
@@ -319,9 +489,16 @@ def build_simple_emri_bundle(config: SimpleEMRIConfig, raw_config: dict[str, Any
         source_seed = _child_seed(source_sequence)
         rng = np.random.default_rng(source_seed)
         source_parameters = _parameters_from_catalog_entry(entry, config.emri, rng)
+        placement_target_time_s = sample_emri_placement_target_time_s(config.emri, observation, rng)
         prepared_parameters = factory.prepare_parameters(source_parameters, observation)
         waveform = waveforms["emri"](**prepared_parameters)
         channels = generate_tdi_xyz_td(waveform, time_s, observation)
+        channels, placement = apply_emri_time_placement(
+            channels,
+            observation,
+            config.emri.placement,
+            placement_target_time_s,
+        )
 
         for channel, series in channels.items():
             tdi_xyz[channel] += np.asarray(series, dtype=np.float64)
@@ -331,6 +508,7 @@ def build_simple_emri_bundle(config: SimpleEMRIConfig, raw_config: dict[str, Any
                 "seed": source_seed,
                 "catalog_entry": entry.to_mapping(),
                 "waveform_parameters": deepcopy(prepared_parameters),
+                "placement": placement,
             }
         )
 

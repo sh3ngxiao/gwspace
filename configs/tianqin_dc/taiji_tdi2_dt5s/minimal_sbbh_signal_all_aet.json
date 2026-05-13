@@ -1,6 +1,6 @@
 {
   "dataset": {
-    "name": "minimal_taiji_tdi2_dt10s_sbbh_signal_all_aet",
+    "name": "minimal_taiji_tdi2_dt5s_sbbh_signal_all_aet",
     "description": "Signal-only stellar-mass BBH A/E/T response generated from the full BP2P BBH catalog."
   },
   "seed": 20260509,

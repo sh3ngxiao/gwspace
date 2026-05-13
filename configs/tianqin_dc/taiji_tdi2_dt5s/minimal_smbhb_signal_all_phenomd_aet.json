@@ -1,6 +1,6 @@
 {
   "dataset": {
-    "name": "minimal_taiji_tdi2_dt10s_smbhb_signal_all_phenomd_aet",
+    "name": "minimal_taiji_tdi2_dt5s_smbhb_signal_all_phenomd_aet",
     "description": "Signal-only SMBHB A/E/T response generated from the full MBHB catalog using GWspace bhb_PhenomD."
   },
   "seed": 20260509,

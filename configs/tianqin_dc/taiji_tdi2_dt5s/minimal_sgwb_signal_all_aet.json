@@ -1,6 +1,6 @@
 {
   "dataset": {
-    "name": "minimal_taiji_tdi2_dt10s_sgwb_signal_all_aet",
+    "name": "minimal_taiji_tdi2_dt5s_sgwb_signal_all_aet",
     "description": "Signal-only isotropic SGWB A/E/T realization using a flat power-law energy-density spectrum."
   },
   "seed": 20260509,

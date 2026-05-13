@@ -1,15 +1,15 @@
 {
   "dataset": {
-    "name": "minimal_taiji_tdi2_dt10s_all_sources_plus_sgwb_merged_aet",
+    "name": "minimal_taiji_tdi2_dt5s_all_sources_plus_sgwb_merged_aet",
     "description": "Merged DWD + SMBHB + SBBH + EMRI + SGWB A/E/T response with one shared noise realization."
   },
   "seed": 20260509,
   "signal_inputs": [
-    "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_taiji_tdi2_dt10s/dwd_signal_all_aet.h5",
-    "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_taiji_tdi2_dt10s/smbhb_signal_all_aet.h5",
-    "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_taiji_tdi2_dt10s/sbbh_signal_all_aet.h5",
-    "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_taiji_tdi2_dt10s/emri_signal_all_aet.h5",
-    "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_taiji_tdi2_dt10s/sgwb_signal_all_aet.h5"
+    "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_taiji_tdi2_dt5s/dwd_signal_all_aet.h5",
+    "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_taiji_tdi2_dt5s/smbhb_signal_all_aet.h5",
+    "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_taiji_tdi2_dt5s/sbbh_signal_all_aet.h5",
+    "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_taiji_tdi2_dt5s/emri_signal_all_aet.h5",
+    "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_taiji_tdi2_dt5s/sgwb_signal_all_aet.h5"
   ],
   "observation": {
     "duration_s": 31536000.0,

@@ -22,7 +22,10 @@ from tianqin_dc.config import ObservationConfig, RunConfig, load_run_config
 from tianqin_dc.dwd_export import DWDCatalogSelectionConfig, _resolve_catalog_entries as resolve_dwd_catalog_entries
 from tianqin_dc.emri_export import (
     EMRICompletionConfig,
+    EMRIPlacementConfig,
     EMRICatalogSelectionConfig,
+    apply_emri_time_placement,
+    sample_emri_placement_target_time_s,
     _parameters_from_catalog_entry as emri_parameters_from_catalog_entry,
     _resolve_catalog_entries as resolve_emri_catalog_entries,
 )
@@ -66,6 +69,8 @@ class SourceSpec:
     parameters: dict[str, Any]
     seed: int | None = None
     catalog_entry: dict[str, Any] | None = None
+    placement: EMRIPlacementConfig | None = None
+    placement_target_time_s: float | None = None
 
     def to_mapping(self) -> dict[str, Any]:
         payload = {
@@ -77,6 +82,8 @@ class SourceSpec:
             payload["seed"] = self.seed
         if self.catalog_entry is not None:
             payload["catalog_entry"] = deepcopy(self.catalog_entry)
+        if self.placement_target_time_s is not None:
+            payload["placement_target_time_s"] = self.placement_target_time_s
         return payload
 
 
@@ -212,7 +219,7 @@ def _resolve_source_population_specs(config: RunConfig) -> list[SourceSpec]:
     return specs
 
 
-def _resolve_emri_catalog_specs(raw_config: Mapping[str, Any]) -> list[SourceSpec]:
+def _resolve_emri_catalog_specs(raw_config: Mapping[str, Any], observation: ObservationConfig | None) -> list[SourceSpec]:
     root_sequence = np.random.SeedSequence(int(raw_config.get("seed", 123456789)))
     selection_sequence, generation_sequence = root_sequence.spawn(2)
     selection_rng = np.random.default_rng(_child_seed(selection_sequence))
@@ -225,13 +232,21 @@ def _resolve_emri_catalog_specs(raw_config: Mapping[str, Any]) -> list[SourceSpe
     for entry, source_sequence in zip(entries, source_sequences, strict=True):
         source_seed = _child_seed(source_sequence)
         rng = np.random.default_rng(source_seed)
+        parameters = emri_parameters_from_catalog_entry(entry, completion, rng)
+        placement_target_time_s = (
+            sample_emri_placement_target_time_s(completion, observation, rng)
+            if observation is not None
+            else None
+        )
         specs.append(
             SourceSpec(
                 kind="emri",
                 population_name="emri_catalog",
-                parameters=emri_parameters_from_catalog_entry(entry, completion, rng),
+                parameters=parameters,
                 seed=source_seed,
                 catalog_entry=entry.to_mapping(),
+                placement=completion.placement,
+                placement_target_time_s=placement_target_time_s,
             )
         )
     return specs
@@ -308,7 +323,11 @@ def _resolve_smbhb_catalog_specs(raw_config: Mapping[str, Any]) -> list[SourceSp
     return specs
 
 
-def resolve_source_specs(config_path: str | Path, raw_config: Mapping[str, Any]) -> list[SourceSpec]:
+def resolve_source_specs(
+    config_path: str | Path,
+    raw_config: Mapping[str, Any],
+    observation: ObservationConfig | None = None,
+) -> list[SourceSpec]:
     if "sources" in raw_config:
         config, _ = load_run_config(config_path)
         return _resolve_source_population_specs(config)
@@ -316,7 +335,7 @@ def resolve_source_specs(config_path: str | Path, raw_config: Mapping[str, Any])
     if "catalog" not in raw_config:
         raise ValueError("Config must contain either 'sources' or a supported source-specific 'catalog' section.")
     if "emri" in raw_config:
-        return _resolve_emri_catalog_specs(raw_config)
+        return _resolve_emri_catalog_specs(raw_config, observation)
     if "bbh" in raw_config:
         return _resolve_bbh_catalog_specs(raw_config)
     if "smbhb" in raw_config:
@@ -345,13 +364,23 @@ def generate_detector_response(
     for index, source_spec in enumerate(source_specs):
         factory = get_source_factory(source_spec.kind)
         generated = factory.generate(source_spec.parameters, detector_observation)
+        generated_channels = generated.channels
+        placement = None
+        if source_spec.kind == "emri" and source_spec.placement is not None:
+            generated_channels, placement = apply_emri_time_placement(
+                generated.channels,
+                detector_observation,
+                source_spec.placement,
+                source_spec.placement_target_time_s,
+            )
         for channel in ("A", "E", "T"):
-            response[channel] += np.asarray(generated.channels[channel], dtype=np.float64)
+            response[channel] += np.asarray(generated_channels[channel], dtype=np.float64)
         record = source_spec.to_mapping()
         record["source_index"] = index
         record["prepared_parameters"] = deepcopy(generated.parameters)
         record["engine"] = generated.engine
         record["detector"] = detector
+        record["placement"] = placement
         generated_records.append(record)
 
     return response, generated_records
@@ -493,7 +522,7 @@ def main() -> int:
         duration_s=job_config.duration_s,
         sample_rate_hz=job_config.sample_rate_hz,
     )
-    source_specs = resolve_source_specs(job_config.source_config_path, job_config.source_config)
+    source_specs = resolve_source_specs(job_config.source_config_path, job_config.source_config, observation)
     time_s = observation.time_array()
 
     detector_responses: dict[str, dict[str, np.ndarray]] = {}

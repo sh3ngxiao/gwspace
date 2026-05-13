@@ -19,7 +19,12 @@ from tianqin_dc.bbh_export import BBHCompletionConfig, _parameters_from_catalog_
 from tianqin_dc.config import ObservationConfig
 from tianqin_dc.dwd_catalog import DWDCatalogEntry, iter_dwd_catalog
 from tianqin_dc.emri_catalog import EMRICatalogEntry, load_emri_catalog
-from tianqin_dc.emri_export import EMRICompletionConfig, _parameters_from_catalog_entry as emri_parameters_from_catalog_entry
+from tianqin_dc.emri_export import (
+    EMRICompletionConfig,
+    apply_emri_time_placement,
+    sample_emri_placement_target_time_s,
+    _parameters_from_catalog_entry as emri_parameters_from_catalog_entry,
+)
 from tianqin_dc.minimal_aet_io import MinimalOutputConfig, save_minimal_aet_hdf5
 from tianqin_dc.mbhb_catalog import MBHBCatalogEntry, iter_mbhb_catalog
 from tianqin_dc.smbhb_export import (
@@ -427,8 +432,9 @@ def _source_metadata_payload(
     entry: Any,
     source_parameters: Mapping[str, Any],
     generated: Any,
+    placement: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    payload = {
         "record_type": "source",
         "source_index": source_index,
         "source_id": f"{kind}_{source_index:08d}",
@@ -446,6 +452,9 @@ def _source_metadata_payload(
             "metadata": generated.metadata,
         },
     }
+    if placement is not None:
+        payload["placement"] = dict(placement)
+    return payload
 
 
 def _write_jsonl_line(handle: Any, payload: Mapping[str, Any]) -> None:
@@ -564,6 +573,11 @@ def _generate_minimal_aet_shard(args: tuple[int, int, MinimalCatalogAETConfig, i
         for entry in entries:
             visited += 1
             parameters = _source_parameters_from_entry(config.kind, entry, config, generation_rng)
+            placement_target_time_s = (
+                sample_emri_placement_target_time_s(config.emri, observation, generation_rng)
+                if config.kind == "emri"
+                else None
+            )
             if (visited - 1) % shard_count != shard_index:
                 continue
             try:
@@ -573,8 +587,17 @@ def _generate_minimal_aet_shard(args: tuple[int, int, MinimalCatalogAETConfig, i
                     f"Failed to generate {config.kind} source #{visited} from {_entry_label(entry)} "
                     f"in shard {shard_index + 1}/{shard_count}."
                 ) from exc
+            generated_channels = generated.channels
+            placement = None
+            if config.kind == "emri":
+                generated_channels, placement = apply_emri_time_placement(
+                    generated.channels,
+                    observation,
+                    config.emri.placement,
+                    placement_target_time_s,
+                )
             for channel in ("A", "E", "T"):
-                partial[channel] += np.asarray(generated.channels[channel], dtype=np.float64)
+                partial[channel] += np.asarray(generated_channels[channel], dtype=np.float64)
             processed += 1
             if metadata_handle is not None:
                 _write_jsonl_line(
@@ -585,6 +608,7 @@ def _generate_minimal_aet_shard(args: tuple[int, int, MinimalCatalogAETConfig, i
                         entry=entry,
                         source_parameters=parameters,
                         generated=generated,
+                        placement=placement,
                     ),
                 )
             if config.progress_interval and processed % config.progress_interval == 0:
@@ -797,14 +821,28 @@ def _build_minimal_catalog_aet_serial(
         for entry in entries:
             processed += 1
             parameters = _source_parameters_from_entry(config.kind, entry, config, generation_rng)
+            placement_target_time_s = (
+                sample_emri_placement_target_time_s(config.emri, observation, generation_rng)
+                if config.kind == "emri"
+                else None
+            )
             try:
                 generated = factory.generate(parameters, observation)
             except Exception as exc:
                 raise RuntimeError(
                     f"Failed to generate {config.kind} source #{processed} from {_entry_label(entry)}."
                 ) from exc
+            generated_channels = generated.channels
+            placement = None
+            if config.kind == "emri":
+                generated_channels, placement = apply_emri_time_placement(
+                    generated.channels,
+                    observation,
+                    config.emri.placement,
+                    placement_target_time_s,
+                )
             for channel in ("A", "E", "T"):
-                summed[channel] += np.asarray(generated.channels[channel], dtype=np.float64)
+                summed[channel] += np.asarray(generated_channels[channel], dtype=np.float64)
             if writer is not None:
                 writer.write_source(
                     _source_metadata_payload(
@@ -813,6 +851,7 @@ def _build_minimal_catalog_aet_serial(
                         entry=entry,
                         source_parameters=parameters,
                         generated=generated,
+                        placement=placement,
                     )
                 )
             if config.progress_interval and processed % config.progress_interval == 0:

@@ -20,11 +20,12 @@ TQ_NUMERICAL_ORBIT_PATH="${TQ_NUMERICAL_ORBIT_PATH:-/public/home/zhuangzhenye/jo
 TQ_NUMERICAL_ORBIT_OUT_OF_RANGE="${TQ_NUMERICAL_ORBIT_OUT_OF_RANGE:-raise}"
 WORKERS="${WORKERS:-${SLURM_CPUS_PER_TASK:-1}}"
 THREADS_PER_WORKER="${THREADS_PER_WORKER:-1}"
+NO_SOURCE_METADATA_OUTPUT="${NO_SOURCE_METADATA_OUTPUT:-1}"
 
 mkdir -p "$LOG_DIR"
 cd "$PROJECT_ROOT"
 
-if type module >/dev/null 2>&1 && { command -v modulecmd >/dev/null 2>&1 || [[ -x /usr/bin/modulecmd ]]; }; then
+if type module >/dev/null 2>&1 && module avail >/dev/null 2>&1; then
   module load apps/anaconda202309 || echo "[WARN] Failed to load module apps/anaconda202309"
   module load gsl2.7.1 || module load gsl || echo "[WARN] Failed to load a GSL module"
 fi
@@ -53,6 +54,7 @@ echo "Workers: $WORKERS"
 echo "Threads per worker: $THREADS_PER_WORKER"
 echo "Output override: ${OUTPUT:-<config output.path>}"
 echo "Source metadata override: ${SOURCE_METADATA_OUTPUT:-<config source_metadata_output.path>}"
+echo "Disable source metadata output: $NO_SOURCE_METADATA_OUTPUT"
 echo "LD_LIBRARY_PATH: ${LD_LIBRARY_PATH:-}"
 
 CMD=("$PYTHON_BIN" -u -m tianqin_dc.minimal_catalog_aet_tq_numorbit --config "$CONFIG")

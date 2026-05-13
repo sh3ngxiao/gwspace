@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J tj_min_smbhb
+#SBATCH -J tj_q3d_smbhb
 #SBATCH -p gpu_part
 #SBATCH -N 1
 #SBATCH -n 1
@@ -12,7 +12,7 @@
 set -eo pipefail
 
 PROJECT_ROOT="${PROJECT_ROOT:-/public/home/zhuangzhenye/jobs/GWSpace}"
-CONFIG="${CONFIG:-$PROJECT_ROOT/configs/tianqin_dc/taiji_tdi2_dt10s/minimal_smbhb_signal_all_aet.json}"
+CONFIG="${CONFIG:-$PROJECT_ROOT/configs/tianqin_dc/taiji_tdi2_dt5s/minimal_smbhb_Q3d_K16_500_eccfd_aet.json}"
 RUN_ROOT="${RUN_ROOT:-/public/home/zhuangzhenye/jobs/gwspace_runs}"
 LOG_DIR="$RUN_ROOT/logs"
 PYTHON_BIN="${PYTHON_BIN:-/public/home/zhuangzhenye/.conda/envs/gwspace312/bin/python}"

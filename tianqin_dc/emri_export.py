@@ -11,14 +11,12 @@ from typing import Any, Mapping
 import h5py
 import numpy as np
 
-from gwspace.Waveform import waveforms
-
 from tianqin_dc.config import DatasetConfig, ObservationConfig, SamplerConfig
 from tianqin_dc.emri_catalog import EMRICatalogEntry, load_emri_catalog
 from tianqin_dc.plotting import save_time_domain_preview
 from tianqin_dc.response import generate_tdi_xyz_td
 from tianqin_dc.sampling import sample_value
-from tianqin_dc.sources.emri import EMRISourceFactory
+from tianqin_dc.sources.emri import EMRISourceFactory, build_interpolated_emri_waveform
 
 
 _TWO_PI = float(2.0 * np.pi)
@@ -491,7 +489,7 @@ def build_simple_emri_bundle(config: SimpleEMRIConfig, raw_config: dict[str, Any
         source_parameters = _parameters_from_catalog_entry(entry, config.emri, rng)
         placement_target_time_s = sample_emri_placement_target_time_s(config.emri, observation, rng)
         prepared_parameters = factory.prepare_parameters(source_parameters, observation)
-        waveform = waveforms["emri"](**prepared_parameters)
+        waveform = build_interpolated_emri_waveform(prepared_parameters, observation)
         channels = generate_tdi_xyz_td(waveform, time_s, observation)
         channels, placement = apply_emri_time_placement(
             channels,

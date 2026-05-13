@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J tj_min_smbhb_ecc
+#SBATCH -J tj_min_dwd
 #SBATCH -p gpu_part
 #SBATCH -N 1
 #SBATCH -n 1
@@ -12,17 +12,18 @@
 set -eo pipefail
 
 PROJECT_ROOT="${PROJECT_ROOT:-/public/home/zhuangzhenye/jobs/GWSpace}"
-CONFIG="${CONFIG:-$PROJECT_ROOT/configs/tianqin_dc/taiji_tdi2_dt10s/minimal_smbhb_signal_all_eccfd_aet.json}"
+CONFIG="${CONFIG:-$PROJECT_ROOT/configs/tianqin_dc/taiji_tdi2_dt5s/minimal_dwd_signal_all_aet.json}"
 RUN_ROOT="${RUN_ROOT:-/public/home/zhuangzhenye/jobs/gwspace_runs}"
 LOG_DIR="$RUN_ROOT/logs"
 PYTHON_BIN="${PYTHON_BIN:-/public/home/zhuangzhenye/.conda/envs/gwspace312/bin/python}"
 WORKERS="${WORKERS:-${SLURM_CPUS_PER_TASK:-1}}"
 THREADS_PER_WORKER="${THREADS_PER_WORKER:-1}"
+NO_SOURCE_METADATA_OUTPUT="${NO_SOURCE_METADATA_OUTPUT:-1}"
 
 mkdir -p "$LOG_DIR"
 cd "$PROJECT_ROOT"
 
-if type module >/dev/null 2>&1; then
+if type module >/dev/null 2>&1 && module avail >/dev/null 2>&1; then
   module load apps/anaconda202309 || echo "[WARN] Failed to load module apps/anaconda202309"
   module load gsl2.7.1 || module load gsl || echo "[WARN] Failed to load a GSL module"
 fi
@@ -47,6 +48,7 @@ echo "Workers: $WORKERS"
 echo "Threads per worker: $THREADS_PER_WORKER"
 echo "Output override: ${OUTPUT:-<config output.path>}"
 echo "Source metadata override: ${SOURCE_METADATA_OUTPUT:-<config source_metadata_output.path>}"
+echo "Disable source metadata output: $NO_SOURCE_METADATA_OUTPUT"
 echo "LD_LIBRARY_PATH: ${LD_LIBRARY_PATH:-}"
 
 CMD=("$PYTHON_BIN" -u -m tianqin_dc.minimal_catalog_aet --config "$CONFIG")

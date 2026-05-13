@@ -1,6 +1,6 @@
 {
   "dataset": {
-    "name": "minimal_taiji_tdi2_dt10s_dwd_signal_all_aet",
+    "name": "minimal_taiji_tdi2_dt5s_dwd_signal_all_aet",
     "description": "Signal-only DWD A/E/T response generated from the full DWD catalog."
   },
   "seed": 20260509,

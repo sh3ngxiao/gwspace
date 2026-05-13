@@ -204,6 +204,12 @@ def load_minimal_catalog_aet_config(path: str | Path) -> tuple[MinimalCatalogAET
     return MinimalCatalogAETConfig.from_config(raw), raw
 
 
+def _without_dwd_source_metadata(config: MinimalCatalogAETConfig) -> MinimalCatalogAETConfig:
+    if config.kind == "dwd" and config.source_metadata_output is not None:
+        return replace(config, source_metadata_output=None)
+    return config
+
+
 def _reservoir_sample[T](items: Iterable[T], count: int, rng: np.random.Generator) -> list[T]:
     reservoir: list[T] = []
     for index, item in enumerate(items):
@@ -868,6 +874,7 @@ def build_minimal_catalog_aet(
     config: MinimalCatalogAETConfig,
     raw_config: Mapping[str, Any] | None = None,
 ) -> tuple[np.ndarray, dict[str, np.ndarray], int]:
+    config = _without_dwd_source_metadata(config)
     if config.workers <= 1:
         return _build_minimal_catalog_aet_serial(config, raw_config)
     return _build_minimal_catalog_aet_parallel(config, raw_config)
@@ -877,6 +884,7 @@ def run_minimal_catalog_aet(
     config: MinimalCatalogAETConfig,
     raw_config: Mapping[str, Any] | None = None,
 ) -> Path:
+    config = _without_dwd_source_metadata(config)
     time_s, summed, processed = build_minimal_catalog_aet(config, raw_config)
     print(f"Saving {config.kind} signal-only minimal A/E/T file to {config.output.path}.", flush=True)
     output_path = save_minimal_aet_hdf5(
@@ -933,6 +941,9 @@ def main() -> int:
         if args.workers <= 0:
             raise ValueError("--workers must be positive.")
         config = replace(config, workers=args.workers)
+    if config.kind == "dwd" and config.source_metadata_output is not None:
+        print("DWD source metadata output is disabled; only the HDF5 signal file will be written.", flush=True)
+        config = _without_dwd_source_metadata(config)
 
     if args.dry_run:
         print(f"kind: {config.kind}")

@@ -8,7 +8,7 @@
     "kind": "emri"
   },
   "catalog": {
-    "path": "tianqin_dc/EMRI_source/selected_100_space_detector_emri_sources.jsonl",
+    "path": "tianqin_dc/EMRI_source/selected_100_space_detector_emri_sources_moderate.jsonl",
     "select_all": true
   },
   "observation": {

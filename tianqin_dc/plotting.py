@@ -60,21 +60,20 @@ def _save_time_domain_preview(
         raise ValueError("No channels were provided.")
 
     max_points = max(2, int(max_points))
-    sample_indices = _sample_indices(time_s.size, max_points)
     time_scale, time_unit = _time_scale_and_unit(time_s)
-    x_values = time_s[sample_indices] / time_scale
 
     try:
         plt = _load_pyplot()
     except Exception:
         return _save_time_domain_preview_pil(
             plot_path,
-            x_values,
+            time_s,
             channels,
             ordered_channels,
-            sample_indices,
             title=title,
+            time_scale=time_scale,
             time_unit=time_unit,
+            max_points=max_points,
         )
 
     fig, axes = plt.subplots(
@@ -99,6 +98,8 @@ def _save_time_domain_preview(
         if values.shape != time_s.shape:
             raise ValueError(f"Channel {channel} has shape {values.shape}, expected {time_s.shape}.")
 
+        sample_indices = _extrema_preserving_sample_indices(values, max_points)
+        x_values = time_s[sample_indices] / time_scale
         sampled = values[sample_indices]
         axis.plot(x_values, sampled, linewidth=0.55, color=colors.get(channel, "#333333"))
         axis.set_ylabel(channel)
@@ -139,13 +140,14 @@ def _load_pyplot():
 
 def _save_time_domain_preview_pil(
     plot_path: Path,
-    x_values: np.ndarray,
+    time_s: np.ndarray,
     channels: Mapping[str, np.ndarray],
     ordered_channels: list[str],
-    sample_indices: np.ndarray,
     *,
     title: str,
+    time_scale: float,
     time_unit: str,
+    max_points: int,
 ) -> Path:
     from PIL import Image, ImageDraw, ImageFont
 
@@ -173,8 +175,8 @@ def _save_time_domain_preview_pil(
     axis_color = (80, 80, 80)
 
     draw.text((left_margin, 20), title, fill=text_color, font=font)
-    x_min = float(x_values[0])
-    x_max = float(x_values[-1])
+    x_min = float(time_s[0] / time_scale)
+    x_max = float(time_s[-1] / time_scale)
     if x_max == x_min:
         x_max = x_min + 1.0
 
@@ -190,6 +192,8 @@ def _save_time_domain_preview_pil(
         plot_height = plot_bottom - plot_top
 
         values = np.asarray(channels[channel], dtype=np.float64)
+        sample_indices = _extrema_preserving_sample_indices(values, max_points)
+        x_values = time_s[sample_indices] / time_scale
         sampled = values[sample_indices]
         y_min, y_max = _finite_min_max(values)
         if y_min == y_max:
@@ -240,10 +244,42 @@ def _ordered_channels(channels: Mapping[str, np.ndarray]) -> list[str]:
     return known + extra
 
 
-def _sample_indices(size: int, max_points: int) -> np.ndarray:
+def _extrema_preserving_sample_indices(values: np.ndarray, max_points: int) -> np.ndarray:
+    size = values.size
     if size <= max_points:
         return np.arange(size)
-    return np.linspace(0, size - 1, num=max_points, dtype=np.int64)
+    if max_points < 4:
+        return np.linspace(0, size - 1, num=max_points, dtype=np.int64)
+
+    bucket_count = max(1, (max_points - 2) // 2)
+    edges = np.linspace(0, size, num=bucket_count + 1, dtype=np.int64)
+    indices = np.empty(2 * bucket_count + 2, dtype=np.int64)
+    cursor = 0
+    indices[cursor] = 0
+    cursor += 1
+
+    for start, stop in zip(edges[:-1], edges[1:], strict=True):
+        if stop <= start:
+            continue
+
+        segment = values[start:stop]
+        finite_mask = np.isfinite(segment)
+        if np.any(finite_mask):
+            finite_offsets = np.flatnonzero(finite_mask)
+            finite_values = segment[finite_mask]
+            indices[cursor] = start + finite_offsets[int(np.argmin(finite_values))]
+            cursor += 1
+            indices[cursor] = start + finite_offsets[int(np.argmax(finite_values))]
+            cursor += 1
+        else:
+            indices[cursor] = start
+            cursor += 1
+            indices[cursor] = stop - 1
+            cursor += 1
+
+    indices[cursor] = size - 1
+    cursor += 1
+    return np.unique(indices[:cursor])
 
 
 def _time_scale_and_unit(time_s: np.ndarray) -> tuple[float, str]:

@@ -1,0 +1,39 @@
+{
+  "dataset": {
+    "name": "minimal_lisa_tdi2_dt5s_smbhb_popIII_K16_100_uniformtc_eccfd_aet",
+    "description": "Signal-only SMBHB A/E/T response for a 100-source K16 popIII catalog with coalescence times evenly spaced over the one-year observation, using GWspace bhb_EccFD and the analytic LISA orbit."
+  },
+  "seed": 20260512,
+  "source": {
+    "kind": "smbhb"
+  },
+  "catalog": {
+    "path": "tianqin_dc/codes/mbhb_catalogs/tianqin_mbhb_popIII_K16_100_uniformtc.csv",
+    "select_all": true
+  },
+  "observation": {
+    "duration_s": 31536000.0,
+    "sample_rate_hz": 0.2,
+    "detector": "LISA",
+    "tdi_generation": 2,
+    "channels": ["A", "E", "T"],
+    "use_gpu": false
+  },
+  "output": {
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt5s/smbhb_popIII_K16_100_uniformtc_eccfd_aet.h5",
+    "overwrite": true,
+    "compression": "gzip",
+    "compression_level": 4
+  },
+  "source_metadata_output": {
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt5s/smbhb_popIII_K16_100_uniformtc_eccfd_aet.sources.jsonl",
+    "overwrite": true
+  },
+  "smbhb": {
+    "seconds_per_year": 31558149.763545603,
+    "fixed": {
+      "engine": "bhb_EccFD"
+    }
+  },
+  "progress_interval": 20
+}

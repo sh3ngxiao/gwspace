@@ -8,6 +8,37 @@ import numpy as np
 from tianqin_dc.config import SamplerConfig, SourcePopulationConfig
 
 
+def _sample_clustered_uniform(spec: SamplerConfig, rng: np.random.Generator) -> float:
+    if not spec.clusters:
+        raise ValueError("Clustered-uniform sampler requires a non-empty 'clusters' list.")
+
+    lows: list[float] = []
+    highs: list[float] = []
+    weights: list[float] = []
+    for index, cluster in enumerate(spec.clusters):
+        if "low" not in cluster or "high" not in cluster:
+            raise ValueError(f"Clustered-uniform cluster {index} requires 'low' and 'high'.")
+        low = float(cluster["low"])
+        high = float(cluster["high"])
+        if high < low:
+            raise ValueError(f"Clustered-uniform cluster {index} requires high >= low.")
+        weight = float(cluster.get("weight", 1.0))
+        if weight < 0.0:
+            raise ValueError(f"Clustered-uniform cluster {index} has negative weight.")
+        lows.append(low)
+        highs.append(high)
+        weights.append(weight)
+
+    weight_array = np.asarray(weights, dtype=np.float64)
+    total_weight = float(np.sum(weight_array))
+    if not np.isfinite(total_weight) or total_weight <= 0.0:
+        raise ValueError("Clustered-uniform sampler requires at least one positive finite weight.")
+
+    probabilities = weight_array / total_weight
+    cluster_index = int(rng.choice(len(lows), p=probabilities))
+    return float(rng.uniform(lows[cluster_index], highs[cluster_index]))
+
+
 def sample_value(spec: SamplerConfig, rng: np.random.Generator) -> Any:
     distribution = spec.distribution.lower()
 
@@ -18,6 +49,9 @@ def sample_value(spec: SamplerConfig, rng: np.random.Generator) -> Any:
         if spec.low is None or spec.high is None:
             raise ValueError("Uniform sampler requires 'low' and 'high'.")
         return float(rng.uniform(spec.low, spec.high))
+
+    if distribution in {"clustered_uniform", "mixture_uniform"}:
+        return _sample_clustered_uniform(spec, rng)
 
     if distribution == "isotropic_polar":
         low = 0.0 if spec.low is None else float(spec.low)

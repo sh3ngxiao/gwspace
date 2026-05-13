@@ -35,6 +35,7 @@ class SamplerConfig:
     mean: float | None = None
     std: float | None = None
     choices: list[Any] | None = None
+    clusters: list[dict[str, Any]] | None = None
 
     @classmethod
     def from_config(cls, value: Any) -> "SamplerConfig":
@@ -50,6 +51,7 @@ class SamplerConfig:
             mean=value.get("mean"),
             std=value.get("std"),
             choices=list(value["choices"]) if value.get("choices") is not None else None,
+            clusters=[dict(item) for item in value["clusters"]] if value.get("clusters") is not None else None,
         )
 
 

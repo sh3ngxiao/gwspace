@@ -114,6 +114,12 @@ def _is_eccfd_waveform(waveform: Any) -> bool:
     return callable(getattr(waveform, "get_ori_waveform", None))
 
 
+def _coalescence_time_shift(freq: np.ndarray, tc: float) -> np.ndarray:
+    # NumPy irfft uses exp(+2 pi i f t), so delaying a source to observation
+    # time tc requires the negative Fourier shift.
+    return np.exp(-2j * np.pi * freq * tc)
+
+
 def _generate_eccfd_tdi_response(
     waveform: Any,
     f_series: np.ndarray,
@@ -132,7 +138,7 @@ def _generate_eccfd_tdi_response(
     )
     freq = np.asarray(freq, dtype=np.float64)
     gw_tdi = np.zeros((3, len(freq)), dtype=np.complex128)
-    t_delay = np.exp(2j * np.pi * freq * waveform.tc)
+    t_delay = _coalescence_time_shift(freq, waveform.tc)
     p_p, p_c = waveform.polarization()
     detector_time_window = _numerical_detector_time_window(detector)
 
@@ -180,7 +186,7 @@ def _generate_amp_phase_tdi_response(
     trans_func, det_class = check_detector_and_channel(detector, channel)
     amp, phase, tf = waveform.get_amp_phase(f_series=f_series)
     gw_tdi = np.zeros((3, len(f_series)), dtype=np.complex128)
-    t_delay = np.exp(2j * np.pi * f_series * waveform.tc)
+    t_delay = _coalescence_time_shift(f_series, waveform.tc)
     detector_time_window = _numerical_detector_time_window(detector)
 
     for mode in amp.keys():
@@ -240,10 +246,7 @@ def _generate_tdi_fd(
             tdi_generation=observation.tdi_generation,
             response_kwargs=kwargs,
         )
-    elif (
-        _numerical_detector_time_window(observation.detector) is not None
-        and _can_generate_amp_phase_tdi_response(waveform)
-    ):
+    elif _can_generate_amp_phase_tdi_response(waveform):
         response = _generate_amp_phase_tdi_response(
             waveform,
             positive_freq,

@@ -14,7 +14,7 @@ import numpy as np
 from tianqin_dc.config import DatasetConfig, ObservationConfig, SamplerConfig
 from tianqin_dc.emri_catalog import EMRICatalogEntry, load_emri_catalog
 from tianqin_dc.plotting import save_time_domain_preview
-from tianqin_dc.response import generate_tdi_xyz_td
+from tianqin_dc.response import generate_tdi_channels_td, generate_tdi_xyz_td
 from tianqin_dc.sampling import sample_value
 from tianqin_dc.sources.emri import EMRISourceFactory, build_interpolated_emri_waveform
 
@@ -183,8 +183,10 @@ class EMRIPlacementConfig:
 
         data = _mapping(value, field_name="emri.placement")
         anchor = str(data.get("anchor", "peak")).lower()
-        if anchor not in {"start", "peak", "end"}:
-            raise ValueError("Config field 'emri.placement.anchor' must be one of: start, peak, end.")
+        if anchor not in {"start", "peak", "end", "trajectory_end", "plunge"}:
+            raise ValueError(
+                "Config field 'emri.placement.anchor' must be one of: start, peak, end, trajectory_end, plunge."
+            )
 
         time_unit = str(data.get("time_unit", "fraction")).lower()
         if time_unit not in {"fraction", "duration_fraction", "seconds", "s"}:
@@ -381,6 +383,116 @@ def sample_emri_placement_target_time_s(
     return float(target_time_s)
 
 
+def apply_emri_waveform_time_placement(
+    waveform: Any,
+    observation: ObservationConfig,
+    placement: EMRIPlacementConfig,
+    target_time_s: float | None,
+) -> dict[str, Any] | None:
+    """Place an EMRI by shifting source waveform time before TDI response.
+
+    Shifting already-generated TDI channels is not equivalent to moving the
+    source in detector time: it also shifts response boundary artifacts and uses
+    the wrong detector orbit time. This helper aligns the source waveform anchor
+    to the requested target before GWspace evaluates delayed TDI samples.
+    """
+
+    if not placement.enabled or target_time_s is None:
+        return None
+
+    activity = waveform.source_activity(
+        threshold_fraction=placement.threshold_fraction,
+        threshold_abs=placement.threshold_abs,
+    )
+    trajectory_end = waveform.trajectory_end()
+    trajectory_end_index = int(trajectory_end["trajectory_end_index"])
+    anchor_indices = {
+        "start": int(activity["original_active_start_index"]),
+        "peak": int(activity["original_peak_index"]),
+        "end": trajectory_end_index,
+        "trajectory_end": trajectory_end_index,
+        "plunge": trajectory_end_index,
+    }
+    anchor_index = anchor_indices[placement.anchor]
+    target_index = int(round(float(target_time_s) / observation.sample_spacing_s))
+    shift_samples = target_index - anchor_index
+    shift_s = float(shift_samples * observation.sample_spacing_s)
+    waveform.set_time_shift_s(shift_s)
+
+    placed_active_start_index = int(activity["original_active_start_index"]) + shift_samples
+    active_end_index = trajectory_end_index if placement.anchor in {"end", "trajectory_end", "plunge"} else int(
+        activity["original_active_end_index"]
+    )
+    placed_active_end_index = active_end_index + shift_samples
+    visible_active_start_index = max(0, placed_active_start_index)
+    visible_active_end_index = min(observation.num_samples - 1, placed_active_end_index)
+    visible_active_samples = max(0, visible_active_end_index - visible_active_start_index + 1)
+
+    return {
+        "enabled": True,
+        "domain": "source_waveform_time",
+        "anchor": placement.anchor,
+        "anchor_source": "few_trajectory_end" if placement.anchor in {"end", "trajectory_end", "plunge"} else "waveform_amplitude",
+        "allow_outside": bool(placement.allow_outside),
+        "target_time_s": float(target_index * observation.sample_spacing_s),
+        "target_index": target_index,
+        "shift_samples": int(shift_samples),
+        "shift_s": shift_s,
+        "threshold": activity["threshold"],
+        "threshold_fraction": activity["threshold_fraction"],
+        "threshold_abs": activity["threshold_abs"],
+        "original_peak_time_s": activity["original_peak_time_s"],
+        "original_peak_index": activity["original_peak_index"],
+        "original_peak_value": activity["original_peak_value"],
+        "original_active_start_time_s": activity["original_active_start_time_s"],
+        "original_active_end_time_s": float(active_end_index * observation.sample_spacing_s),
+        "original_active_samples": int(active_end_index - int(activity["original_active_start_index"]) + 1),
+        "waveform_threshold_active_end_time_s": activity["original_active_end_time_s"],
+        "waveform_threshold_active_samples": activity["original_active_samples"],
+        "trajectory_end": trajectory_end,
+        "placed_peak_time_s": float((int(activity["original_peak_index"]) + shift_samples) * observation.sample_spacing_s),
+        "placed_active_start_time_s": float(placed_active_start_index * observation.sample_spacing_s),
+        "placed_active_end_time_s": float(placed_active_end_index * observation.sample_spacing_s),
+        "visible_active_start_time_s": (
+            None if visible_active_samples == 0 else float(visible_active_start_index * observation.sample_spacing_s)
+        ),
+        "visible_active_end_time_s": (
+            None if visible_active_samples == 0 else float(visible_active_end_index * observation.sample_spacing_s)
+        ),
+        "visible_active_samples": int(visible_active_samples),
+        "cropped_left_samples": int(max(0, -placed_active_start_index)),
+        "cropped_right_samples": int(max(0, placed_active_end_index - (observation.num_samples - 1))),
+    }
+
+
+def generate_emri_aet_with_waveform_placement(
+    factory: EMRISourceFactory,
+    parameters: dict[str, Any],
+    observation: ObservationConfig,
+    placement: EMRIPlacementConfig,
+    target_time_s: float | None,
+) -> tuple[Any, dict[str, Any] | None]:
+    prepared = factory.prepare_parameters(parameters, observation)
+    waveform = build_interpolated_emri_waveform(prepared, observation)
+    placement_diagnostics = apply_emri_waveform_time_placement(waveform, observation, placement, target_time_s)
+    channels = generate_tdi_channels_td(waveform, observation.time_array(), observation)
+    generated = factory.make_result(
+        channels,
+        prepared,
+        notes=[
+            "EMRI source waveform is cached on the observation grid and interpolated at delayed TDI sample times.",
+            "EMRI time placement is applied to source waveform time before TDI response generation.",
+        ],
+        metadata={
+            "few_backend_request": prepared.get("backend", "cpu"),
+            "time_interpolation": "linear",
+            "time_taper_duration_s": waveform.taper_duration_s,
+            "time_placement_domain": "source_waveform_time" if placement_diagnostics is not None else None,
+        },
+    )
+    return generated, placement_diagnostics
+
+
 def apply_emri_time_placement(
     channels: Mapping[str, np.ndarray],
     observation: ObservationConfig,
@@ -490,13 +602,13 @@ def build_simple_emri_bundle(config: SimpleEMRIConfig, raw_config: dict[str, Any
         placement_target_time_s = sample_emri_placement_target_time_s(config.emri, observation, rng)
         prepared_parameters = factory.prepare_parameters(source_parameters, observation)
         waveform = build_interpolated_emri_waveform(prepared_parameters, observation)
-        channels = generate_tdi_xyz_td(waveform, time_s, observation)
-        channels, placement = apply_emri_time_placement(
-            channels,
+        placement = apply_emri_waveform_time_placement(
+            waveform,
             observation,
             config.emri.placement,
             placement_target_time_s,
         )
+        channels = generate_tdi_xyz_td(waveform, time_s, observation)
 
         for channel, series in channels.items():
             tdi_xyz[channel] += np.asarray(series, dtype=np.float64)

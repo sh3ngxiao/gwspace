@@ -21,7 +21,7 @@ from tianqin_dc.dwd_catalog import DWDCatalogEntry, iter_dwd_catalog
 from tianqin_dc.emri_catalog import EMRICatalogEntry, load_emri_catalog
 from tianqin_dc.emri_export import (
     EMRICompletionConfig,
-    apply_emri_time_placement,
+    generate_emri_aet_with_waveform_placement,
     sample_emri_placement_target_time_s,
     _parameters_from_catalog_entry as emri_parameters_from_catalog_entry,
 )
@@ -587,21 +587,23 @@ def _generate_minimal_aet_shard(args: tuple[int, int, MinimalCatalogAETConfig, i
             if (visited - 1) % shard_count != shard_index:
                 continue
             try:
-                generated = factory.generate(parameters, observation)
+                if config.kind == "emri" and config.emri.placement.enabled:
+                    generated, placement = generate_emri_aet_with_waveform_placement(
+                        factory,
+                        parameters,
+                        observation,
+                        config.emri.placement,
+                        placement_target_time_s,
+                    )
+                else:
+                    generated = factory.generate(parameters, observation)
+                    placement = None
             except Exception as exc:
                 raise RuntimeError(
                     f"Failed to generate {config.kind} source #{visited} from {_entry_label(entry)} "
                     f"in shard {shard_index + 1}/{shard_count}."
                 ) from exc
             generated_channels = generated.channels
-            placement = None
-            if config.kind == "emri":
-                generated_channels, placement = apply_emri_time_placement(
-                    generated.channels,
-                    observation,
-                    config.emri.placement,
-                    placement_target_time_s,
-                )
             for channel in ("A", "E", "T"):
                 partial[channel] += np.asarray(generated_channels[channel], dtype=np.float64)
             processed += 1
@@ -833,20 +835,22 @@ def _build_minimal_catalog_aet_serial(
                 else None
             )
             try:
-                generated = factory.generate(parameters, observation)
+                if config.kind == "emri" and config.emri.placement.enabled:
+                    generated, placement = generate_emri_aet_with_waveform_placement(
+                        factory,
+                        parameters,
+                        observation,
+                        config.emri.placement,
+                        placement_target_time_s,
+                    )
+                else:
+                    generated = factory.generate(parameters, observation)
+                    placement = None
             except Exception as exc:
                 raise RuntimeError(
                     f"Failed to generate {config.kind} source #{processed} from {_entry_label(entry)}."
                 ) from exc
             generated_channels = generated.channels
-            placement = None
-            if config.kind == "emri":
-                generated_channels, placement = apply_emri_time_placement(
-                    generated.channels,
-                    observation,
-                    config.emri.placement,
-                    placement_target_time_s,
-                )
             for channel in ("A", "E", "T"):
                 summed[channel] += np.asarray(generated_channels[channel], dtype=np.float64)
             if writer is not None:

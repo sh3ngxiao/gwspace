@@ -46,20 +46,7 @@
       "Phi_r0": { "distribution": "uniform", "low": 0.0, "high": 6.283185307179586 }
     },
     "placement": {
-      "enabled": true,
-      "anchor": "end",
-      "time_unit": "fraction",
-      "time_sampler": {
-        "distribution": "clustered_uniform",
-        "clusters": [
-          { "low": 0.12, "high": 0.28, "weight": 0.12 },
-          { "low": 0.42, "high": 0.66, "weight": 0.32 },
-          { "low": 0.82, "high": 1.04, "weight": 0.34 },
-          { "low": 1.18, "high": 1.40, "weight": 0.22 }
-        ]
-      },
-      "allow_outside": true,
-      "threshold_fraction": 1e-6
+      "enabled": false
     }
   },
   "progress_interval": 1000

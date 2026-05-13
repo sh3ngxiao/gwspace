@@ -24,7 +24,7 @@ from tianqin_dc.emri_export import (
     EMRICompletionConfig,
     EMRIPlacementConfig,
     EMRICatalogSelectionConfig,
-    apply_emri_time_placement,
+    generate_emri_aet_with_waveform_placement,
     sample_emri_placement_target_time_s,
     _parameters_from_catalog_entry as emri_parameters_from_catalog_entry,
     _resolve_catalog_entries as resolve_emri_catalog_entries,
@@ -245,7 +245,7 @@ def _resolve_emri_catalog_specs(raw_config: Mapping[str, Any], observation: Obse
                 parameters=parameters,
                 seed=source_seed,
                 catalog_entry=entry.to_mapping(),
-                placement=completion.placement,
+                placement=completion.placement if completion.placement.enabled else None,
                 placement_target_time_s=placement_target_time_s,
             )
         )
@@ -363,16 +363,18 @@ def generate_detector_response(
 
     for index, source_spec in enumerate(source_specs):
         factory = get_source_factory(source_spec.kind)
-        generated = factory.generate(source_spec.parameters, detector_observation)
-        generated_channels = generated.channels
         placement = None
-        if source_spec.kind == "emri" and source_spec.placement is not None:
-            generated_channels, placement = apply_emri_time_placement(
-                generated.channels,
+        if source_spec.kind == "emri" and source_spec.placement is not None and source_spec.placement.enabled:
+            generated, placement = generate_emri_aet_with_waveform_placement(
+                factory,
+                source_spec.parameters,
                 detector_observation,
                 source_spec.placement,
                 source_spec.placement_target_time_s,
             )
+        else:
+            generated = factory.generate(source_spec.parameters, detector_observation)
+        generated_channels = generated.channels
         for channel in ("A", "E", "T"):
             response[channel] += np.asarray(generated_channels[channel], dtype=np.float64)
         record = source_spec.to_mapping()

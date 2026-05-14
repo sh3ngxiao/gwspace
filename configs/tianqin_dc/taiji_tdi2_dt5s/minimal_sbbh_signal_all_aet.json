@@ -1,14 +1,14 @@
 {
   "dataset": {
     "name": "minimal_taiji_tdi2_dt5s_sbbh_signal_all_aet",
-    "description": "Signal-only stellar-mass BBH A/E/T response generated from the full BP2P BBH catalog."
+    "description": "Signal-only stellar-mass BBH A/E/T response generated from the detector-selected SNR>1 BBH catalog."
   },
   "seed": 20260509,
   "source": {
     "kind": "sbbh"
   },
   "catalog": {
-    "path": "tianqin_dc/codes/bp2p_bbh_catalogs/catalog_001.csv",
+    "path": "tianqin_dc/bbh_source/catalog_001_snr_gt_1_with_snr_TAIJI",
     "select_all": true
   },
   "observation": {
@@ -20,13 +20,13 @@
     "use_gpu": false
   },
   "output": {
-    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_taiji_tdi2_dt5s/sbbh_signal_all_aet.h5",
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/bbh_snr_gt_1_aet/taiji_tdi2_dt5s/sbbh_signal_all_aet.h5",
     "overwrite": true,
     "compression": "gzip",
     "compression_level": 4
   },
   "source_metadata_output": {
-    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_taiji_tdi2_dt5s/sbbh_signal_all_aet.sources.jsonl",
+    "path": "/public/home/zhuangzhenye/jobs/gwspace_runs/bbh_snr_gt_1_aet/taiji_tdi2_dt5s/sbbh_signal_all_aet.sources.jsonl",
     "overwrite": true
   },
   "bbh": {

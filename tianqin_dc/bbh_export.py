@@ -349,12 +349,24 @@ def _parameters_from_catalog_entry(
         "tc": float(entry.t_c_yr * completion.seconds_per_year),
     }
 
-    if completion.use_catalog_psi_for_polarization and "psi" not in completion.fixed and "psi" not in completion.sampler:
-        parameters["psi"] = entry.psi_rad
-
     parameters.update(deepcopy(completion.fixed))
     for name, spec in completion.sampler.items():
         parameters[name] = sample_value(spec, rng)
+
+    if completion.use_catalog_psi_for_polarization and "psi" not in completion.fixed and "psi" not in completion.sampler:
+        parameters["psi"] = entry.psi_rad
+
+    catalog_overrides = {
+        "chi1": entry.chi1,
+        "chi2": entry.chi2,
+        "iota": entry.iota_rad,
+        "Lambda": entry.lambda_rad,
+        "Beta": entry.beta_rad,
+    }
+    for name, value in catalog_overrides.items():
+        if value is not None and name not in completion.fixed:
+            parameters[name] = float(value)
+
     parameters.setdefault("psi", 0.0)
     return parameters
 

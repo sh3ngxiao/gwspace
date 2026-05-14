@@ -54,6 +54,10 @@ def save_minimal_aet_hdf5(
     a: np.ndarray,
     e: np.ndarray,
     t: np.ndarray,
+    preview: bool = True,
+    preview_title: str | None = None,
+    preview_output_path: str | Path | None = None,
+    preview_show_stats: bool = True,
 ) -> Path:
     output_path = Path(output.path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -100,12 +104,15 @@ def save_minimal_aet_hdf5(
             if chunk_index == total_chunks or chunk_index % progress_every == 0:
                 print(f"Wrote HDF5 chunk {chunk_index}/{total_chunks}.", flush=True)
 
-    save_time_domain_preview(
-        output_path,
-        arrays["time"],
-        {"A": arrays["a"], "E": arrays["e"], "T": arrays["t"]},
-        title=f"{output_path.name} A/E/T",
-    )
+    if preview:
+        save_time_domain_preview(
+            output_path,
+            arrays["time"],
+            {"A": arrays["a"], "E": arrays["e"], "T": arrays["t"]},
+            title=preview_title or f"{output_path.name} A/E/T",
+            output_path=preview_output_path,
+            show_stats=preview_show_stats,
+        )
     return output_path
 
 

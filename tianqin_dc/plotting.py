@@ -22,6 +22,7 @@ def save_time_domain_preview(
     title: str | None = None,
     output_path: str | Path | None = None,
     max_points: int = DEFAULT_MAX_TIME_DOMAIN_PLOT_POINTS,
+    show_stats: bool = True,
     fail_on_error: bool = False,
 ) -> Path | None:
     """Save a compact time-domain preview next to an HDF5 output file."""
@@ -34,6 +35,7 @@ def save_time_domain_preview(
             channels,
             title=title or Path(hdf5_path).name,
             max_points=max_points,
+            show_stats=show_stats,
         )
     except Exception as exc:
         if fail_on_error:
@@ -49,6 +51,7 @@ def _save_time_domain_preview(
     *,
     title: str,
     max_points: int,
+    show_stats: bool,
 ) -> Path:
     if time_s.ndim != 1:
         raise ValueError(f"time_s must be one-dimensional, got shape {time_s.shape}.")
@@ -74,6 +77,7 @@ def _save_time_domain_preview(
             time_scale=time_scale,
             time_unit=time_unit,
             max_points=max_points,
+            show_stats=show_stats,
         )
 
     fig, axes = plt.subplots(
@@ -105,16 +109,17 @@ def _save_time_domain_preview(
         axis.set_ylabel(channel)
         axis.grid(True, linewidth=0.4, alpha=0.35)
         axis.ticklabel_format(axis="y", style="sci", scilimits=(-2, 2))
-        axis.text(
-            0.99,
-            0.86,
-            _channel_stats(values),
-            transform=axis.transAxes,
-            ha="right",
-            va="top",
-            fontsize=8,
-            bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.75, "pad": 2.0},
-        )
+        if show_stats:
+            axis.text(
+                0.99,
+                0.86,
+                _channel_stats(values),
+                transform=axis.transAxes,
+                ha="right",
+                va="top",
+                fontsize=8,
+                bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.75, "pad": 2.0},
+            )
 
     axes_array[-1].set_xlabel(f"Time [{time_unit}]")
     fig.suptitle(title, fontsize=12)
@@ -148,6 +153,7 @@ def _save_time_domain_preview_pil(
     time_scale: float,
     time_unit: str,
     max_points: int,
+    show_stats: bool,
 ) -> Path:
     from PIL import Image, ImageDraw, ImageFont
 
@@ -226,7 +232,8 @@ def _save_time_domain_preview_pil(
         draw.text((12, panel_top + 20), channel, fill=text_color, font=font)
         draw.text((plot_left, panel_bottom - 20), f"{y_min:.2e}", fill=text_color, font=font)
         draw.text((plot_right - 80, panel_bottom - 20), f"{y_max:.2e}", fill=text_color, font=font)
-        draw.text((plot_right - 170, panel_top + 20), _channel_stats(values), fill=text_color, font=font)
+        if show_stats:
+            draw.text((plot_right - 170, panel_top + 20), _channel_stats(values), fill=text_color, font=font)
 
     draw.text((plot_left, height - 34), f"Time [{time_unit}]", fill=text_color, font=font)
     draw.text((plot_left, height - 20), f"{x_min:.3g}", fill=text_color, font=font)

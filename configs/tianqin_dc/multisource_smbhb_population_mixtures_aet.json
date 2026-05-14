@@ -1,0 +1,112 @@
+{
+  "seed": 20260514,
+  "output_root": "/public/home/zhuangzhenye/jobs/gwspace_runs/multi_source_mixtures",
+  "plot_dir": "/public/home/zhuangzhenye/jobs/gwspace_runs/multi_source_mixtures/plots",
+  "smbhb_populations": [
+    {
+      "key": "smbhb_popIII",
+      "source_key": "smbhb_popIII",
+      "label": "SMBHB popIII"
+    },
+    {
+      "key": "smbhb_Q3d",
+      "source_key": "smbhb_Q3d",
+      "label": "SMBHB Q3d"
+    },
+    {
+      "key": "smbhb_Q3nod",
+      "source_key": "smbhb_Q3nod",
+      "label": "SMBHB Q3nod"
+    }
+  ],
+  "output": {
+    "overwrite": true,
+    "compression": "gzip",
+    "compression_level": 4,
+    "chunk_rows": 65536
+  },
+  "plot": {
+    "max_points": 200000,
+    "dpi": 180
+  },
+  "detectors": {
+    "tianqin": {
+      "title": "TianQin",
+      "observation": {
+        "duration_s": 31536000.0,
+        "sample_rate_hz": 1.0,
+        "detector": "TQ",
+        "tdi_generation": 2,
+        "channels": ["A", "E", "T"],
+        "use_gpu": false
+      },
+      "noise": {
+        "enabled": true,
+        "model": "TQ",
+        "unit": "relative_frequency",
+        "include_confusion": false
+      },
+      "sources": {
+        "dwd": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_tianqin_tdi2_dt1s/dwd_signal_all_aet.h5",
+        "emri": "/public/home/zhuangzhenye/jobs/gwspace_runs/emri_no_forced_placement/emri_tianqin_tdi2_dt1s_no_forced_placement.h5",
+        "sbbh": "/public/home/zhuangzhenye/jobs/gwspace_runs/bbh_snr_gt_1_aet/tianqin_tdi2_dt1s/sbbh_signal_all_aet.h5",
+        "sgwb": "/public/home/zhuangzhenye/jobs/gwspace_runs/sgwb_20260514_174907/tianqin_tdi2_dt1s/sgwb_signal_all_aet.h5",
+        "smbhb_popIII": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_tianqin_tdi2_dt1s/smbhb_popIII_K16_100_uniformtc_eccfd_aet.h5",
+        "smbhb_Q3d": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_tianqin_tdi2_dt1s/smbhb_Q3d_K16_100_uniformtc_eccfd_aet.h5",
+        "smbhb_Q3nod": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_tianqin_tdi2_dt1s/smbhb_Q3nod_K16_100_uniformtc_eccfd_aet.h5"
+      }
+    },
+    "lisa": {
+      "title": "LISA",
+      "observation": {
+        "duration_s": 31536000.0,
+        "sample_rate_hz": 0.2,
+        "detector": "LISA",
+        "tdi_generation": 2,
+        "channels": ["A", "E", "T"],
+        "use_gpu": false
+      },
+      "noise": {
+        "enabled": true,
+        "model": "LISA",
+        "unit": "relative_frequency",
+        "include_confusion": false
+      },
+      "sources": {
+        "dwd": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt5s/dwd_signal_all_aet_fft_norm_fixed.h5",
+        "emri": "/public/home/zhuangzhenye/jobs/gwspace_runs/emri_no_forced_placement/emri_lisa_tdi2_dt5s_no_forced_placement.h5",
+        "sbbh": "/public/home/zhuangzhenye/jobs/gwspace_runs/bbh_snr_gt_1_aet/lisa_tdi2_dt5s/sbbh_signal_all_aet.h5",
+        "sgwb": "/public/home/zhuangzhenye/jobs/gwspace_runs/sgwb_20260514_174907/lisa_tdi2_dt5s/sgwb_signal_all_aet.h5",
+        "smbhb_popIII": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt5s/smbhb_popIII_K16_100_uniformtc_eccfd_aet.h5",
+        "smbhb_Q3d": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt5s/smbhb_Q3d_K16_100_uniformtc_eccfd_aet.h5",
+        "smbhb_Q3nod": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_lisa_tdi2_dt5s/smbhb_Q3nod_K16_100_uniformtc_eccfd_aet.h5"
+      }
+    },
+    "taiji": {
+      "title": "Taiji",
+      "observation": {
+        "duration_s": 31536000.0,
+        "sample_rate_hz": 0.2,
+        "detector": "Taiji",
+        "tdi_generation": 2,
+        "channels": ["A", "E", "T"],
+        "use_gpu": false
+      },
+      "noise": {
+        "enabled": true,
+        "model": "Taiji",
+        "unit": "relative_frequency",
+        "include_confusion": false
+      },
+      "sources": {
+        "dwd": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_taiji_tdi2_dt5s/dwd_signal_all_aet.h5",
+        "emri": "/public/home/zhuangzhenye/jobs/gwspace_runs/emri_no_forced_placement/emri_taiji_tdi2_dt5s_no_forced_placement.h5",
+        "sbbh": "/public/home/zhuangzhenye/jobs/gwspace_runs/bbh_snr_gt_1_aet/taiji_tdi2_dt5s/sbbh_signal_all_aet.h5",
+        "sgwb": "/public/home/zhuangzhenye/jobs/gwspace_runs/sgwb_20260514_174907/taiji_tdi2_dt5s/sgwb_signal_all_aet.h5",
+        "smbhb_popIII": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_taiji_tdi2_dt5s/smbhb_popIII_K16_100_uniformtc_eccfd_aet.h5",
+        "smbhb_Q3d": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_taiji_tdi2_dt5s/smbhb_Q3d_K16_100_uniformtc_eccfd_aet.h5",
+        "smbhb_Q3nod": "/public/home/zhuangzhenye/jobs/gwspace_runs/minimal_aet_taiji_tdi2_dt5s/smbhb_Q3nod_K16_100_uniformtc_eccfd_aet.h5"
+      }
+    }
+  }
+}

@@ -15,6 +15,7 @@ _OMEGA_MATTER = 0.311
 _OMEGA_RADIATION_AND_NU = 2.47e-5 * pow(0.677, -2) + 0.1 * pow(93.12, -1) * pow(0.677, -2)
 _H0_KM_S_MPC = 67.7
 _REQUIRED_FIELDS = ("z", "m1_Msun", "m2_Msun", "t_c_yr", "psi_rad")
+_OPTIONAL_FLOAT_FIELDS = ("chi1", "chi2", "iota_rad", "Lambda_rad", "Beta_rad", "SNR")
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,12 @@ class BBHCatalogEntry:
     m2_msun: float
     t_c_yr: float
     psi_rad: float
+    chi1: float | None = None
+    chi2: float | None = None
+    iota_rad: float | None = None
+    lambda_rad: float | None = None
+    beta_rad: float | None = None
+    snr: float | None = None
 
     @property
     def total_mass_msun(self) -> float:
@@ -42,7 +49,7 @@ class BBHCatalogEntry:
         return float((self.m1_msun * self.m2_msun) ** (3.0 / 5.0) / total_mass ** (1.0 / 5.0))
 
     def to_mapping(self) -> dict[str, Any]:
-        return {
+        payload = {
             "file_path": self.file_path,
             "file_name": self.file_name,
             "row_number": self.row_number,
@@ -55,6 +62,16 @@ class BBHCatalogEntry:
             "chirp_mass_Msun": self.chirp_mass_msun,
             "q": self.mass_ratio,
         }
+        optional_values = {
+            "chi1": self.chi1,
+            "chi2": self.chi2,
+            "iota_rad": self.iota_rad,
+            "Lambda_rad": self.lambda_rad,
+            "Beta_rad": self.beta_rad,
+            "SNR": self.snr,
+        }
+        payload.update({name: value for name, value in optional_values.items() if value is not None})
+        return payload
 
 
 def redshift_to_luminosity_distance_mpc(redshift: float | np.ndarray) -> float | np.ndarray:
@@ -111,6 +128,19 @@ def _parse_catalog_row(path: Path, row_number: int, row: dict[str, str]) -> BBHC
             f"BBH catalog '{path}' row {row_number} requires m1_Msun >= m2_Msun, got {m1_msun} < {m2_msun}."
         )
 
+    optional: dict[str, float | None] = {}
+    for field in _OPTIONAL_FLOAT_FIELDS:
+        value = row.get(field)
+        if value is None or value == "":
+            optional[field] = None
+            continue
+        try:
+            optional[field] = float(value)
+        except ValueError as exc:
+            raise ValueError(
+                f"BBH catalog '{path}' row {row_number} contains a non-numeric value for optional column '{field}'."
+            ) from exc
+
     return BBHCatalogEntry(
         file_path=str(path.resolve()),
         file_name=path.name,
@@ -120,6 +150,12 @@ def _parse_catalog_row(path: Path, row_number: int, row: dict[str, str]) -> BBHC
         m2_msun=m2_msun,
         t_c_yr=t_c_yr,
         psi_rad=psi_rad,
+        chi1=optional["chi1"],
+        chi2=optional["chi2"],
+        iota_rad=optional["iota_rad"],
+        lambda_rad=optional["Lambda_rad"],
+        beta_rad=optional["Beta_rad"],
+        snr=optional["SNR"],
     )
 
 

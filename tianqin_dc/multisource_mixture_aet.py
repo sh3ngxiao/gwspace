@@ -36,6 +36,7 @@ SOURCE_COLORS = {
     "smbhb_popIII": "#17becf",
     "smbhb_Q3d": "#8c564b",
     "smbhb_Q3nod": "#e377c2",
+    "noise": "#7f7f7f",
 }
 DATA_COLOR = "#32388f"
 
@@ -191,6 +192,7 @@ class MixtureJob:
     frequency_plot_path: Path
     no_noise_frequency_plot_path: Path
     source_plot_path: Path
+    source_frequency_plot_path: Path
 
     @property
     def title(self) -> str:
@@ -199,6 +201,13 @@ class MixtureJob:
     @property
     def source_title(self) -> str:
         return f"{self.detector.title} Multi-source Mixture Source Contributions ({self.population.label}, A channel)"
+
+    @property
+    def source_frequency_title(self) -> str:
+        return (
+            f"{self.detector.title} Multi-source Mixture Source Contributions "
+            f"({self.population.label}, A channel, frequency domain)"
+        )
 
     @property
     def no_noise_title(self) -> str:
@@ -262,6 +271,7 @@ def iter_jobs(config: BatchConfig) -> Iterable[MixtureJob]:
                 frequency_plot_path=config.plot_dir / f"{stem}_frequency.png",
                 no_noise_frequency_plot_path=config.plot_dir / f"{stem}_no_noise_frequency.png",
                 source_plot_path=config.plot_dir / f"{stem}_source_contributions_A.png",
+                source_frequency_plot_path=config.plot_dir / f"{stem}_source_contributions_A_frequency.png",
             )
 
 
@@ -296,15 +306,17 @@ def add_noise_to_mixture(
     config: BatchConfig,
     job: MixtureJob,
     channels: Mapping[str, np.ndarray],
-) -> dict[str, np.ndarray]:
+) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
     noisy = {channel: np.asarray(channels[channel], dtype=np.float64).copy() for channel in ("A", "E", "T")}
+    reference = noisy["A"]
+    noise_channels = {channel: np.zeros_like(reference, dtype=np.float64) for channel in ("A", "E", "T")}
     if job.detector.noise.enabled:
         observation = job.detector.observation
-        noise = generate_noise(observation, job.detector.noise, seed=_noise_seed(config, job)).series
+        noise_channels = generate_noise(observation, job.detector.noise, seed=_noise_seed(config, job)).series
         for channel in ("A", "E", "T"):
-            noisy[channel] += noise[channel]
+            noisy[channel] += noise_channels[channel]
 
-    return noisy
+    return noisy, noise_channels
 
 
 def run_job(config: BatchConfig, job: MixtureJob) -> Path:
@@ -312,7 +324,13 @@ def run_job(config: BatchConfig, job: MixtureJob) -> Path:
     for source in job.source_inputs:
         print(f"  {source.label}: {source.path}", flush=True)
     time_s, signal_channels, components_a = build_signal_mixture(job)
-    noisy_channels = add_noise_to_mixture(config, job, signal_channels)
+    noisy_channels, noise_channels = add_noise_to_mixture(config, job, signal_channels)
+    contribution_components = [
+        (source.label, components_a[source.key], source.color)
+        for source in job.source_inputs
+    ]
+    if job.detector.noise.enabled:
+        contribution_components.append(("Noise", noise_channels["A"], SOURCE_COLORS["noise"]))
 
     no_noise_output_path = save_minimal_aet_hdf5(
         config.output.minimal_output(job.no_noise_output_path),
@@ -379,12 +397,20 @@ def run_job(config: BatchConfig, job: MixtureJob) -> Path:
         job.source_plot_path,
         time_s=time_s,
         mixture_a=noisy_channels["A"],
-        components=[
-            (source.label, components_a[source.key], source.color)
-            for source in job.source_inputs
-        ],
+        components=contribution_components,
         title=job.source_title,
         max_points=config.plot.max_points,
+        dpi=config.plot.dpi,
+    )
+    save_a_channel_source_frequency_contribution_plot(
+        job.source_frequency_plot_path,
+        time_s=time_s,
+        mixture_a=noisy_channels["A"],
+        components=contribution_components,
+        title=job.source_frequency_title,
+        max_points=config.plot.frequency_max_points,
+        f_min_hz=config.plot.frequency_min_hz,
+        f_max_hz=config.plot.frequency_max_hz,
         dpi=config.plot.dpi,
     )
     print(f"Wrote mixture output to {output_path}", flush=True)
@@ -649,6 +675,294 @@ def _draw_log_frequency_series(
         points.append((x_pixel, y_pixel))
     if len(points) > 1:
         draw.line(points, fill=color, width=1)
+
+
+def _positive_min_max(*arrays: np.ndarray) -> tuple[float, float]:
+    positive_values = []
+    for values in arrays:
+        array = np.asarray(values, dtype=np.float64)
+        mask = np.isfinite(array) & (array > 0.0)
+        if np.any(mask):
+            positive_values.append(array[mask])
+    if not positive_values:
+        return 1.0e-30, 1.0
+    merged = np.concatenate(positive_values)
+    y_min = float(np.nanmin(merged))
+    y_max = float(np.nanmax(merged))
+    if y_min == y_max:
+        y_min *= 0.8
+        y_max *= 1.2
+    return y_min, y_max
+
+
+def _log_padded_limits(*arrays: np.ndarray) -> tuple[float, float]:
+    y_min, y_max = _positive_min_max(*arrays)
+    log_y_min = np.floor(np.log10(y_min))
+    log_y_max = np.ceil(np.log10(y_max))
+    if log_y_min == log_y_max:
+        log_y_min -= 1.0
+        log_y_max += 1.0
+    return float(10.0**log_y_min), float(10.0**log_y_max)
+
+
+def _frequency_plot_range(
+    time_s: np.ndarray,
+    *,
+    f_min_hz: float,
+    f_max_hz: float | None,
+) -> tuple[np.ndarray, np.ndarray, float, float]:
+    time_s = np.asarray(time_s, dtype=np.float64)
+    if time_s.ndim != 1 or time_s.size < 2:
+        raise ValueError("time_s must contain at least two samples.")
+    dt = float(time_s[1] - time_s[0])
+    if not np.isfinite(dt) or dt <= 0.0:
+        raise ValueError("time_s must be strictly increasing.")
+    frequencies = np.fft.rfftfreq(time_s.size, d=dt)
+    upper = float(frequencies[-1]) if f_max_hz is None else min(float(f_max_hz), float(frequencies[-1]))
+    lower = max(float(f_min_hz), float(frequencies[1]) if frequencies.size > 1 else 0.0)
+    if upper <= lower:
+        raise ValueError(f"Invalid frequency plot range: {lower}--{upper} Hz.")
+    frequency_mask = (frequencies >= lower) & (frequencies <= upper)
+    if not np.any(frequency_mask):
+        raise ValueError(f"No FFT bins fall in frequency range {lower}--{upper} Hz.")
+    return frequencies, frequency_mask, lower, upper
+
+
+def _sample_frequency_pair(
+    frequencies: np.ndarray,
+    frequency_mask: np.ndarray,
+    data_amplitude: np.ndarray,
+    component: np.ndarray,
+    *,
+    max_points: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    data_amplitude = np.asarray(data_amplitude, dtype=np.float64)
+    component_amplitude = np.abs(np.fft.rfft(np.asarray(component, dtype=np.float64)))
+    freq_values = frequencies[frequency_mask]
+    data_values = data_amplitude[frequency_mask]
+    component_values = component_amplitude[frequency_mask]
+    points_per_series = max(2, int(max_points) // 2)
+    sample_indices = np.unique(
+        np.concatenate(
+            (
+                _frequency_plot_sample_indices(data_values, points_per_series),
+                _frequency_plot_sample_indices(component_values, points_per_series),
+            )
+        )
+    )
+    if sample_indices.size == 0:
+        return freq_values[:0], data_values[:0], component_values[:0]
+    return freq_values[sample_indices], data_values[sample_indices], component_values[sample_indices]
+
+
+def _positive_log_series(
+    freq_values: np.ndarray,
+    amp_values: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    mask = np.isfinite(freq_values) & np.isfinite(amp_values) & (freq_values > 0.0) & (amp_values > 0.0)
+    return freq_values[mask], amp_values[mask]
+
+
+def save_a_channel_source_frequency_contribution_plot(
+    output_path: str | Path,
+    *,
+    time_s: np.ndarray,
+    mixture_a: np.ndarray,
+    components: list[tuple[str, np.ndarray, str]],
+    title: str,
+    max_points: int,
+    f_min_hz: float,
+    f_max_hz: float | None,
+    dpi: int,
+) -> Path:
+    if not components:
+        raise ValueError("At least one source component is required.")
+    time_s = np.asarray(time_s, dtype=np.float64)
+    mixture_a = np.asarray(mixture_a, dtype=np.float64)
+    if time_s.shape != mixture_a.shape:
+        raise ValueError(f"mixture_a has shape {mixture_a.shape}, expected {time_s.shape}.")
+    frequencies, frequency_mask, lower, upper = _frequency_plot_range(
+        time_s,
+        f_min_hz=f_min_hz,
+        f_max_hz=f_max_hz,
+    )
+    mixture_amplitude = np.abs(np.fft.rfft(mixture_a))
+
+    try:
+        plt = _load_pyplot()
+    except Exception:
+        return _save_a_channel_source_frequency_contribution_plot_pil(
+            output_path,
+            time_s=time_s,
+            mixture_a=mixture_a,
+            components=components,
+            frequencies=frequencies,
+            frequency_mask=frequency_mask,
+            title=title,
+            max_points=max_points,
+            lower=lower,
+            upper=upper,
+        )
+
+    fig, axes = plt.subplots(
+        len(components),
+        1,
+        figsize=(13.0, max(7.0, 2.25 * len(components))),
+        sharex=True,
+        constrained_layout=True,
+    )
+    axes_array = np.atleast_1d(axes)
+
+    for axis, (label, values, color) in zip(axes_array, components, strict=True):
+        component = np.asarray(values, dtype=np.float64)
+        if component.shape != time_s.shape:
+            raise ValueError(f"Component '{label}' has shape {component.shape}, expected {time_s.shape}.")
+        freq_values, data_values, component_values = _sample_frequency_pair(
+            frequencies,
+            frequency_mask,
+            mixture_amplitude,
+            component,
+            max_points=max(2, int(max_points)),
+        )
+        data_freq, data_amp = _positive_log_series(freq_values, data_values)
+        component_freq, component_amp = _positive_log_series(freq_values, component_values)
+        if data_amp.size:
+            axis.loglog(data_freq, data_amp, color=DATA_COLOR, linewidth=0.45, alpha=0.78, label="Data")
+        if component_amp.size:
+            axis.loglog(component_freq, component_amp, color=color, linewidth=0.85, alpha=0.95, label=label)
+        axis.set_title(label, fontsize=10, loc="left")
+        axis.set_ylabel(r"$|\tilde{h}_A(f)|$")
+        axis.set_ylim(*_log_padded_limits(data_values, component_values))
+        axis.grid(True, which="both", linewidth=0.35, alpha=0.32)
+        axis.legend(loc="upper right", fontsize=8, frameon=True)
+
+    axes_array[-1].set_xlabel("Frequency [Hz]")
+    axes_array[-1].set_xlim(lower, upper)
+    fig.suptitle(f"{title}, {_format_frequency_range(lower, upper)}", fontsize=13)
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=dpi)
+    plt.close(fig)
+    print(f"Wrote A-channel source frequency contribution plot to {path}", flush=True)
+    return path
+
+
+def _save_a_channel_source_frequency_contribution_plot_pil(
+    output_path: str | Path,
+    *,
+    time_s: np.ndarray,
+    mixture_a: np.ndarray,
+    components: list[tuple[str, np.ndarray, str]],
+    frequencies: np.ndarray,
+    frequency_mask: np.ndarray,
+    title: str,
+    max_points: int,
+    lower: float,
+    upper: float,
+) -> Path:
+    from PIL import Image, ImageDraw, ImageFont
+
+    width = 1400
+    panel_height = 265
+    top_margin = 62
+    bottom_margin = 58
+    gap = 24
+    left_margin = 104
+    right_margin = 44
+    height = top_margin + bottom_margin + len(components) * panel_height + (len(components) - 1) * gap
+    image = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.load_default()
+    text_color = (38, 38, 38)
+    grid_color = (220, 220, 220)
+    axis_color = (80, 80, 80)
+    data_color = _hex_to_rgb(DATA_COLOR)
+    mixture_amplitude = np.abs(np.fft.rfft(mixture_a))
+
+    draw.text((left_margin, 20), f"{title}, {_format_frequency_range(lower, upper)}", fill=text_color, font=font)
+    plot_left = left_margin
+    plot_right = width - right_margin
+    plot_width = plot_right - plot_left
+    log_x_min = np.log10(lower)
+    log_x_max = np.log10(upper)
+
+    for index, (label, values, color) in enumerate(components):
+        component = np.asarray(values, dtype=np.float64)
+        if component.shape != time_s.shape:
+            raise ValueError(f"Component '{label}' has shape {component.shape}, expected {time_s.shape}.")
+        freq_values, data_values, component_values = _sample_frequency_pair(
+            frequencies,
+            frequency_mask,
+            mixture_amplitude,
+            component,
+            max_points=max(2, min(int(max_points), 120_000)),
+        )
+        y_min, y_max = _log_padded_limits(data_values, component_values)
+        log_y_min = np.log10(y_min)
+        log_y_max = np.log10(y_max)
+
+        panel_top = top_margin + index * (panel_height + gap)
+        panel_bottom = panel_top + panel_height
+        plot_top = panel_top + 34
+        plot_bottom = panel_bottom - 34
+        plot_height = plot_bottom - plot_top
+
+        draw.rectangle((plot_left, plot_top, plot_right, plot_bottom), outline=axis_color)
+        for tick in range(1, 5):
+            x = plot_left + tick * plot_width / 5.0
+            draw.line((x, plot_top, x, plot_bottom), fill=grid_color)
+        for tick in range(1, 4):
+            y = plot_top + tick * plot_height / 4.0
+            draw.line((plot_left, y, plot_right, y), fill=grid_color)
+
+        _draw_log_frequency_series(
+            draw,
+            freq_values,
+            data_values,
+            log_x_min=log_x_min,
+            log_x_max=log_x_max,
+            log_y_min=log_y_min,
+            log_y_max=log_y_max,
+            plot_left=plot_left,
+            plot_right=plot_right,
+            plot_top=plot_top,
+            plot_bottom=plot_bottom,
+            color=data_color,
+        )
+        _draw_log_frequency_series(
+            draw,
+            freq_values,
+            component_values,
+            log_x_min=log_x_min,
+            log_x_max=log_x_max,
+            log_y_min=log_y_min,
+            log_y_max=log_y_max,
+            plot_left=plot_left,
+            plot_right=plot_right,
+            plot_top=plot_top,
+            plot_bottom=plot_bottom,
+            color=_hex_to_rgb(color),
+        )
+
+        draw.text((12, panel_top + 44), "|h~_A(f)|", fill=text_color, font=font)
+        draw.text((plot_left, panel_top + 10), label, fill=text_color, font=font)
+        draw.text((plot_left, panel_bottom - 24), f"{y_min:.1e}", fill=text_color, font=font)
+        draw.text((plot_right - 72, panel_bottom - 24), f"{y_max:.1e}", fill=text_color, font=font)
+        legend_y = panel_top + 10
+        draw.line((plot_right - 170, legend_y + 6, plot_right - 145, legend_y + 6), fill=data_color, width=2)
+        draw.text((plot_right - 140, legend_y), "Data", fill=text_color, font=font)
+        draw.line((plot_right - 96, legend_y + 6, plot_right - 71, legend_y + 6), fill=_hex_to_rgb(color), width=2)
+        draw.text((plot_right - 66, legend_y), label, fill=text_color, font=font)
+
+    draw.text((plot_left, height - 34), "Frequency [Hz]", fill=text_color, font=font)
+    draw.text((plot_left, height - 20), f"{lower:.1e}", fill=text_color, font=font)
+    draw.text((plot_right - 72, height - 20), f"{upper:.1e}", fill=text_color, font=font)
+
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    image.save(path)
+    print(f"Wrote A-channel source frequency contribution plot to {path}", flush=True)
+    return path
 
 
 def _combined_sample_indices(data: np.ndarray, component: np.ndarray, max_points: int) -> np.ndarray:
@@ -926,6 +1240,7 @@ def print_dry_run(config: BatchConfig, jobs: list[MixtureJob]) -> None:
         print(f"  frequency_plot: {job.frequency_plot_path}")
         print(f"  no_noise_frequency_plot: {job.no_noise_frequency_plot_path}")
         print(f"  source_plot: {job.source_plot_path}")
+        print(f"  source_frequency_plot: {job.source_frequency_plot_path}")
         print(f"  noise_enabled: {job.detector.noise.enabled}")
         print(f"  noise_model: {job.detector.noise.model}")
         print(f"  noise_seed: {_noise_seed(config, job)}")

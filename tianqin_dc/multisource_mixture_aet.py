@@ -49,6 +49,9 @@ def _mapping(value: Any, *, field_name: str) -> Mapping[str, Any]:
 @dataclass(frozen=True)
 class PlotConfig:
     max_points: int = DEFAULT_MAX_TIME_DOMAIN_PLOT_POINTS
+    frequency_max_points: int = DEFAULT_MAX_TIME_DOMAIN_PLOT_POINTS
+    frequency_min_hz: float = 1.0e-4
+    frequency_max_hz: float | None = None
     dpi: int = 180
 
     @classmethod
@@ -58,6 +61,9 @@ class PlotConfig:
         data = _mapping(value, field_name="plot")
         return cls(
             max_points=int(data.get("max_points", DEFAULT_MAX_TIME_DOMAIN_PLOT_POINTS)),
+            frequency_max_points=int(data.get("frequency_max_points", data.get("max_points", DEFAULT_MAX_TIME_DOMAIN_PLOT_POINTS))),
+            frequency_min_hz=float(data.get("frequency_min_hz", 1.0e-4)),
+            frequency_max_hz=None if data.get("frequency_max_hz") is None else float(data["frequency_max_hz"]),
             dpi=int(data.get("dpi", 180)),
         )
 
@@ -179,7 +185,11 @@ class MixtureJob:
     population: SMBHBPopulationConfig
     source_inputs: tuple[SourceInput, ...]
     output_path: Path
+    no_noise_output_path: Path
     mixture_plot_path: Path
+    no_noise_mixture_plot_path: Path
+    frequency_plot_path: Path
+    no_noise_frequency_plot_path: Path
     source_plot_path: Path
 
     @property
@@ -189,6 +199,18 @@ class MixtureJob:
     @property
     def source_title(self) -> str:
         return f"{self.detector.title} Multi-source Mixture Source Contributions ({self.population.label}, A channel)"
+
+    @property
+    def no_noise_title(self) -> str:
+        return f"{self.detector.title} Multi-source Mixture ({self.population.label}, no noise)"
+
+    @property
+    def frequency_title(self) -> str:
+        return f"{self.detector.title} {self.population.label} A/E/T frequency-domain signals"
+
+    @property
+    def no_noise_frequency_title(self) -> str:
+        return f"{self.detector.title} {self.population.label} A/E/T frequency-domain signals (no noise)"
 
 
 def load_batch_config(path: str | Path) -> BatchConfig:
@@ -234,7 +256,11 @@ def iter_jobs(config: BatchConfig) -> Iterable[MixtureJob]:
                 population=population,
                 source_inputs=source_inputs,
                 output_path=config.output_root / f"{stem}.h5",
+                no_noise_output_path=config.output_root / f"{stem}_no_noise.h5",
                 mixture_plot_path=config.plot_dir / f"{stem}.png",
+                no_noise_mixture_plot_path=config.plot_dir / f"{stem}_no_noise.png",
+                frequency_plot_path=config.plot_dir / f"{stem}_frequency.png",
+                no_noise_frequency_plot_path=config.plot_dir / f"{stem}_no_noise_frequency.png",
                 source_plot_path=config.plot_dir / f"{stem}_source_contributions_A.png",
             )
 
@@ -250,7 +276,7 @@ def _noise_seed(config: BatchConfig, job: MixtureJob) -> int:
     return config.seed + job.detector_index
 
 
-def build_mixture(config: BatchConfig, job: MixtureJob) -> tuple[np.ndarray, dict[str, np.ndarray], dict[str, np.ndarray]]:
+def build_signal_mixture(job: MixtureJob) -> tuple[np.ndarray, dict[str, np.ndarray], dict[str, np.ndarray]]:
     observation = job.detector.observation
     time_s = observation.time_array()
     summed = {channel: np.zeros_like(time_s, dtype=np.float64) for channel in ("A", "E", "T")}
@@ -263,42 +289,96 @@ def build_mixture(config: BatchConfig, job: MixtureJob) -> tuple[np.ndarray, dic
         for channel in ("A", "E", "T"):
             summed[channel] += np.asarray(channels[channel], dtype=np.float64)
 
+    return time_s, summed, components_a
+
+
+def add_noise_to_mixture(
+    config: BatchConfig,
+    job: MixtureJob,
+    channels: Mapping[str, np.ndarray],
+) -> dict[str, np.ndarray]:
+    noisy = {channel: np.asarray(channels[channel], dtype=np.float64).copy() for channel in ("A", "E", "T")}
     if job.detector.noise.enabled:
+        observation = job.detector.observation
         noise = generate_noise(observation, job.detector.noise, seed=_noise_seed(config, job)).series
         for channel in ("A", "E", "T"):
-            summed[channel] += noise[channel]
+            noisy[channel] += noise[channel]
 
-    return time_s, summed, components_a
+    return noisy
 
 
 def run_job(config: BatchConfig, job: MixtureJob) -> Path:
     print(f"Running {job.detector.key} / {job.population.key}", flush=True)
     for source in job.source_inputs:
         print(f"  {source.label}: {source.path}", flush=True)
-    time_s, channels, components_a = build_mixture(config, job)
+    time_s, signal_channels, components_a = build_signal_mixture(job)
+    noisy_channels = add_noise_to_mixture(config, job, signal_channels)
+
+    no_noise_output_path = save_minimal_aet_hdf5(
+        config.output.minimal_output(job.no_noise_output_path),
+        time_s=time_s,
+        a=signal_channels["A"],
+        e=signal_channels["E"],
+        t=signal_channels["T"],
+        preview=False,
+    )
+    save_time_domain_preview(
+        no_noise_output_path,
+        time_s,
+        signal_channels,
+        title=job.no_noise_title,
+        output_path=job.no_noise_mixture_plot_path,
+        max_points=config.plot.max_points,
+        show_stats=False,
+        fail_on_error=True,
+    )
+    save_frequency_domain_preview(
+        job.no_noise_frequency_plot_path,
+        time_s=time_s,
+        channels=signal_channels,
+        title=job.no_noise_frequency_title,
+        detector_title=job.detector.title,
+        population_label=job.population.label,
+        max_points=config.plot.frequency_max_points,
+        f_min_hz=config.plot.frequency_min_hz,
+        f_max_hz=config.plot.frequency_max_hz,
+        dpi=config.plot.dpi,
+    )
 
     output_path = save_minimal_aet_hdf5(
         config.output.minimal_output(job.output_path),
         time_s=time_s,
-        a=channels["A"],
-        e=channels["E"],
-        t=channels["T"],
+        a=noisy_channels["A"],
+        e=noisy_channels["E"],
+        t=noisy_channels["T"],
         preview=False,
     )
     save_time_domain_preview(
         output_path,
         time_s,
-        channels,
+        noisy_channels,
         title=job.title,
         output_path=job.mixture_plot_path,
         max_points=config.plot.max_points,
         show_stats=False,
         fail_on_error=True,
     )
+    save_frequency_domain_preview(
+        job.frequency_plot_path,
+        time_s=time_s,
+        channels=noisy_channels,
+        title=job.frequency_title,
+        detector_title=job.detector.title,
+        population_label=job.population.label,
+        max_points=config.plot.frequency_max_points,
+        f_min_hz=config.plot.frequency_min_hz,
+        f_max_hz=config.plot.frequency_max_hz,
+        dpi=config.plot.dpi,
+    )
     save_a_channel_source_contribution_plot(
         job.source_plot_path,
         time_s=time_s,
-        mixture_a=channels["A"],
+        mixture_a=noisy_channels["A"],
         components=[
             (source.label, components_a[source.key], source.color)
             for source in job.source_inputs
@@ -308,7 +388,267 @@ def run_job(config: BatchConfig, job: MixtureJob) -> Path:
         dpi=config.plot.dpi,
     )
     print(f"Wrote mixture output to {output_path}", flush=True)
+    print(f"Wrote no-noise mixture output to {no_noise_output_path}", flush=True)
     return output_path
+
+
+def _frequency_plot_sample_indices(values: np.ndarray, max_points: int) -> np.ndarray:
+    values = np.asarray(values)
+    finite = np.isfinite(values) & (values > 0.0)
+    valid_indices = np.flatnonzero(finite)
+    if valid_indices.size == 0:
+        return valid_indices
+    if valid_indices.size <= max_points:
+        return valid_indices
+    reduced = _extrema_preserving_sample_indices(values[valid_indices], max_points)
+    return valid_indices[reduced]
+
+
+def _format_frequency_range(f_min_hz: float, f_max_hz: float) -> str:
+    return f"{f_min_hz:.0e}-{f_max_hz:.0e} Hz"
+
+
+def save_frequency_domain_preview(
+    output_path: str | Path,
+    *,
+    time_s: np.ndarray,
+    channels: Mapping[str, np.ndarray],
+    title: str,
+    detector_title: str,
+    population_label: str,
+    max_points: int,
+    f_min_hz: float,
+    f_max_hz: float | None,
+    dpi: int,
+) -> Path:
+    time_s = np.asarray(time_s, dtype=np.float64)
+    if time_s.ndim != 1 or time_s.size < 2:
+        raise ValueError("time_s must contain at least two samples.")
+    dt = float(time_s[1] - time_s[0])
+    if not np.isfinite(dt) or dt <= 0.0:
+        raise ValueError("time_s must be strictly increasing.")
+
+    frequencies = np.fft.rfftfreq(time_s.size, d=dt)
+    upper = float(frequencies[-1]) if f_max_hz is None else min(float(f_max_hz), float(frequencies[-1]))
+    lower = max(float(f_min_hz), float(frequencies[1]) if frequencies.size > 1 else 0.0)
+    if upper <= lower:
+        raise ValueError(f"Invalid frequency plot range: {lower}--{upper} Hz.")
+    frequency_mask = (frequencies >= lower) & (frequencies <= upper)
+    if not np.any(frequency_mask):
+        raise ValueError(f"No FFT bins fall in frequency range {lower}--{upper} Hz.")
+
+    ordered_channels = [channel for channel in ("A", "E", "T") if channel in channels]
+    if not ordered_channels:
+        raise ValueError("No A/E/T channels were provided.")
+
+    try:
+        plt = _load_pyplot()
+    except Exception:
+        return _save_frequency_domain_preview_pil(
+            output_path,
+            time_s=time_s,
+            channels=channels,
+            frequencies=frequencies,
+            frequency_mask=frequency_mask,
+            title=title,
+            detector_title=detector_title,
+            population_label=population_label,
+            ordered_channels=ordered_channels,
+            max_points=max_points,
+            lower=lower,
+            upper=upper,
+        )
+
+    fig, axes = plt.subplots(
+        len(ordered_channels),
+        1,
+        figsize=(13.0, max(7.0, 2.8 * len(ordered_channels))),
+        sharex=True,
+        constrained_layout=True,
+    )
+    axes_array = np.atleast_1d(axes)
+
+    for axis, channel in zip(axes_array, ordered_channels, strict=True):
+        values = np.asarray(channels[channel], dtype=np.float64)
+        if values.shape != time_s.shape:
+            raise ValueError(f"Channel {channel} has shape {values.shape}, expected {time_s.shape}.")
+        freq_values, amp_values = _sample_frequency_channel(
+            frequencies,
+            frequency_mask,
+            values,
+            max_points=max(2, int(max_points)),
+        )
+        if amp_values.size == 0:
+            continue
+        axis.loglog(freq_values, amp_values, linewidth=0.45, color="#1f77b4")
+        axis.set_title(f"{detector_title} {population_label} {channel} channel", fontsize=12)
+        axis.set_ylabel(rf"$|\tilde{{h}}_{{{channel}}}(f)|$")
+        axis.grid(True, which="both", linewidth=0.35, alpha=0.32)
+
+    axes_array[-1].set_xlabel("Frequency [Hz]")
+    axes_array[-1].set_xlim(lower, upper)
+    fig.suptitle(f"{title}, {_format_frequency_range(lower, upper)}", fontsize=13)
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=dpi)
+    plt.close(fig)
+    print(f"Wrote frequency-domain preview to {path}", flush=True)
+    return path
+
+
+def _sample_frequency_channel(
+    frequencies: np.ndarray,
+    frequency_mask: np.ndarray,
+    values: np.ndarray,
+    *,
+    max_points: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    amplitude = np.abs(np.fft.rfft(values))
+    freq_values = frequencies[frequency_mask]
+    amp_values = amplitude[frequency_mask]
+    sample_indices = _frequency_plot_sample_indices(amp_values, max_points)
+    if sample_indices.size == 0:
+        return freq_values[:0], amp_values[:0]
+    return freq_values[sample_indices], amp_values[sample_indices]
+
+
+def _save_frequency_domain_preview_pil(
+    output_path: str | Path,
+    *,
+    time_s: np.ndarray,
+    channels: Mapping[str, np.ndarray],
+    frequencies: np.ndarray,
+    frequency_mask: np.ndarray,
+    title: str,
+    detector_title: str,
+    population_label: str,
+    ordered_channels: list[str],
+    max_points: int,
+    lower: float,
+    upper: float,
+) -> Path:
+    from PIL import Image, ImageDraw, ImageFont
+
+    width = 1400
+    panel_height = 300
+    top_margin = 62
+    bottom_margin = 58
+    gap = 28
+    left_margin = 104
+    right_margin = 44
+    height = top_margin + bottom_margin + len(ordered_channels) * panel_height + (len(ordered_channels) - 1) * gap
+    image = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.load_default()
+    text_color = (38, 38, 38)
+    grid_color = (220, 220, 220)
+    axis_color = (80, 80, 80)
+    line_color = (31, 119, 180)
+
+    draw.text((left_margin, 20), f"{title}, {_format_frequency_range(lower, upper)}", fill=text_color, font=font)
+    plot_left = left_margin
+    plot_right = width - right_margin
+    plot_width = plot_right - plot_left
+    log_x_min = np.log10(lower)
+    log_x_max = np.log10(upper)
+
+    for index, channel in enumerate(ordered_channels):
+        values = np.asarray(channels[channel], dtype=np.float64)
+        if values.shape != time_s.shape:
+            raise ValueError(f"Channel {channel} has shape {values.shape}, expected {time_s.shape}.")
+        freq_values, amp_values = _sample_frequency_channel(
+            frequencies,
+            frequency_mask,
+            values,
+            max_points=max(2, min(int(max_points), 120_000)),
+        )
+        panel_top = top_margin + index * (panel_height + gap)
+        panel_bottom = panel_top + panel_height
+        plot_top = panel_top + 34
+        plot_bottom = panel_bottom - 34
+        plot_height = plot_bottom - plot_top
+
+        draw.rectangle((plot_left, plot_top, plot_right, plot_bottom), outline=axis_color)
+        for tick in range(1, 5):
+            x = plot_left + tick * plot_width / 5.0
+            draw.line((x, plot_top, x, plot_bottom), fill=grid_color)
+        for tick in range(1, 4):
+            y = plot_top + tick * plot_height / 4.0
+            draw.line((plot_left, y, plot_right, y), fill=grid_color)
+
+        if amp_values.size:
+            y_min = float(np.nanmin(amp_values))
+            y_max = float(np.nanmax(amp_values))
+            if y_min <= 0.0 or not np.isfinite(y_min):
+                y_min = float(np.nanmin(amp_values[amp_values > 0.0]))
+            if y_min == y_max:
+                y_min *= 0.8
+                y_max *= 1.2
+            log_y_min = np.floor(np.log10(y_min))
+            log_y_max = np.ceil(np.log10(y_max))
+            if log_y_min == log_y_max:
+                log_y_min -= 1.0
+                log_y_max += 1.0
+            _draw_log_frequency_series(
+                draw,
+                freq_values,
+                amp_values,
+                log_x_min=log_x_min,
+                log_x_max=log_x_max,
+                log_y_min=log_y_min,
+                log_y_max=log_y_max,
+                plot_left=plot_left,
+                plot_right=plot_right,
+                plot_top=plot_top,
+                plot_bottom=plot_bottom,
+                color=line_color,
+            )
+            draw.text((plot_left, panel_bottom - 24), f"1e{int(log_y_min)}", fill=text_color, font=font)
+            draw.text((plot_right - 62, panel_bottom - 24), f"1e{int(log_y_max)}", fill=text_color, font=font)
+
+        draw.text((plot_left, panel_top + 10), f"{detector_title} {population_label} {channel} channel", fill=text_color, font=font)
+        draw.text((12, panel_top + 44), f"|h~_{channel}(f)|", fill=text_color, font=font)
+
+    draw.text((plot_left, height - 34), "Frequency [Hz]", fill=text_color, font=font)
+    draw.text((plot_left, height - 20), f"{lower:.1e}", fill=text_color, font=font)
+    draw.text((plot_right - 72, height - 20), f"{upper:.1e}", fill=text_color, font=font)
+
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    image.save(path)
+    print(f"Wrote frequency-domain preview to {path}", flush=True)
+    return path
+
+
+def _draw_log_frequency_series(
+    draw: Any,
+    freq_values: np.ndarray,
+    amp_values: np.ndarray,
+    *,
+    log_x_min: float,
+    log_x_max: float,
+    log_y_min: float,
+    log_y_max: float,
+    plot_left: int,
+    plot_right: int,
+    plot_top: int,
+    plot_bottom: int,
+    color: tuple[int, int, int],
+) -> None:
+    plot_width = plot_right - plot_left
+    plot_height = plot_bottom - plot_top
+    points: list[tuple[float, float]] = []
+    for freq, amp in zip(freq_values, amp_values, strict=True):
+        if not np.isfinite(freq) or not np.isfinite(amp) or freq <= 0.0 or amp <= 0.0:
+            if len(points) > 1:
+                draw.line(points, fill=color, width=1)
+            points = []
+            continue
+        x_pixel = plot_left + (np.log10(float(freq)) - log_x_min) / (log_x_max - log_x_min) * plot_width
+        y_pixel = plot_bottom - (np.log10(float(amp)) - log_y_min) / (log_y_max - log_y_min) * plot_height
+        points.append((x_pixel, y_pixel))
+    if len(points) > 1:
+        draw.line(points, fill=color, width=1)
 
 
 def _combined_sample_indices(data: np.ndarray, component: np.ndarray, max_points: int) -> np.ndarray:
@@ -580,7 +920,11 @@ def print_dry_run(config: BatchConfig, jobs: list[MixtureJob]) -> None:
     for job in jobs:
         print(f"- {job.detector.key} / {job.population.key}")
         print(f"  output: {job.output_path}")
+        print(f"  no_noise_output: {job.no_noise_output_path}")
         print(f"  mixture_plot: {job.mixture_plot_path}")
+        print(f"  no_noise_mixture_plot: {job.no_noise_mixture_plot_path}")
+        print(f"  frequency_plot: {job.frequency_plot_path}")
+        print(f"  no_noise_frequency_plot: {job.no_noise_frequency_plot_path}")
         print(f"  source_plot: {job.source_plot_path}")
         print(f"  noise_enabled: {job.detector.noise.enabled}")
         print(f"  noise_model: {job.detector.noise.model}")

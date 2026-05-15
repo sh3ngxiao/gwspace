@@ -27,9 +27,6 @@
   },
   "plot": {
     "max_points": 200000,
-    "frequency_max_points": 200000,
-    "frequency_min_hz": 0.0001,
-    "frequency_max_hz": null,
     "dpi": 180
   },
   "detectors": {

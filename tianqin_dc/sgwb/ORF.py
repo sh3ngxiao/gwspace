@@ -4,7 +4,6 @@ import numpy as np
 import healpy as hp
 from healpy import Alm
 import numpy.linalg as LA
-from scipy.special import sph_harm
 from tqdm import tqdm
 
 # -*- coding: utf-8 -*-

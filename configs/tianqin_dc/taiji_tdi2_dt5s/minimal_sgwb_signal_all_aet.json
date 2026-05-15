@@ -1,7 +1,7 @@
 {
   "dataset": {
     "name": "minimal_taiji_tdi2_dt5s_sgwb_signal_all_aet",
-    "description": "Signal-only isotropic SGWB A/E/T realization using a flat power-law energy-density spectrum."
+    "description": "Signal-only isotropic SGWB A/E/T realization using a power-law energy-density spectrum and ORF A/E/T auto-response."
   },
   "seed": 20260509,
   "observation": {
@@ -20,6 +20,14 @@
     "h0_km_s_mpc": 67.7,
     "f_min_hz": 1.0e-4,
     "f_max_hz": 0.05,
+    "response_model": "orf_aet",
+    "transfer_frequency_hz": null,
+    "t_low_frequency_power": 2.0,
+    "t_response_floor": 0.0,
+    "response_nside": 6,
+    "response_frequency_points": 256,
+    "response_time_segments": 8,
+    "response_chunk_size": 65536,
     "channel_response": {
       "A": 1.0,
       "E": 1.0,
